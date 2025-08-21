@@ -4,176 +4,310 @@
  * Original: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen
  */
 
+/**
+ * TODO: 
+ * Remove item logo on overlay
+ * Redo overlay format to following:
+ *   You're watching (small grey text)
+ *   Item Title (large text)
+ *   Season X (smaller bold text)
+ *   (small gap)
+ *   Episode Name: Ep. Number (also smaller bold text)
+ *   Episode Plot (grey smaller text)
+ * (restructure html as such)
+ * Change overlay showing to only when paused and no mouse movement is detected for 10 seconds.
+ * When overlay is showing, if moue movement is detected, hide overlay. And after 10 seconds of no mouse movement, show overlay again.
+ * If overlay is clicked on, hide overlay as well as unpause the video.
+ * Keep simplicity and syncrounous, add comments where appropriate, remove redundant stuff
+ */
+
 (function () {
   'use strict';
 
   class JellyfinPauseScreen {
     constructor() {
-      // Video state
       this.currentVideo = null;
       this.currentItemId = null;
-
-      // Auth state
       this.userId = null;
       this.token = null;
+      this.lastItemIdCheck = 0;
+      this.cleanupListeners = null;
+      this.imageCache = new Map();
+      this.observer = null;
 
       // DOM elements
       this.overlay = null;
       this.overlayContent = null;
+      this.overlayLogo = null;
       this.overlayPlot = null;
       this.overlayDetails = null;
-
-      // Timers and observers
-      this.observer = null;
-      this.overlayTimer = null;
-      this.mouseMoveTimeout = null;
-      this.lastMouseMovement = Date.now();
-
-      // Recovery state
-      this.recoveryAttempts = 0;
-      this.lastRecoveryTime = 0;
-      this.maxRecoveryAttempts = 3;
-      this.recoveryBackoffMs = 1000;
+      this.overlayDisc = null;
 
       this.init();
     }
 
     init() {
+      const credentials = this.getCredentials();
+      if (!credentials) {
+        console.error("Jellyfin credentials not found");
+        return;
+      }
+
+      this.userId = credentials.userId;
+      this.token = credentials.token;
+
+      this.createOverlay();
+      this.setupVideoObserver();
+    }
+
+    getCredentials() {
+      const creds = localStorage.getItem("jellyfin_credentials");
+      if (!creds) return null;
+
       try {
-        const credentials = this.getCredentials();
-        if (!credentials) {
-          console.debug('[PauseScreen] No credentials found, retrying in 5s...');
-          setTimeout(() => this.retryInit(), 5000);
-          return;
-        }
-
-        this.userId = credentials.userId;
-        this.token = credentials.token;
-
-        this.createOverlay();
-        this.setupVideoObserver();
-
-        // Reset recovery state on successful init
-        this.recoveryAttempts = 0;
-        this.lastRecoveryTime = 0;
-      } catch (error) {
-        console.error('[PauseScreen] Error in init:', error);
-        this.handleInitError();
+        const parsed = JSON.parse(creds);
+        const server = parsed.Servers?.[0];
+        return server ? { token: server.AccessToken, userId: server.UserId } : null;
+      } catch {
+        return null;
       }
-    }
-
-    retryInit() {
-      if (this.recoveryAttempts >= this.maxRecoveryAttempts) {
-        console.error('[PauseScreen] Max recovery attempts reached, giving up');
-        return;
-      }
-
-      const now = Date.now();
-      const timeSinceLastRecovery = now - this.lastRecoveryTime;
-      const backoff = this.recoveryBackoffMs * Math.pow(2, this.recoveryAttempts);
-
-      if (timeSinceLastRecovery < backoff) {
-        console.debug('[PauseScreen] Too soon to retry, waiting...');
-        setTimeout(() => this.retryInit(), backoff - timeSinceLastRecovery);
-        return;
-      }
-
-      console.debug(`[PauseScreen] Recovery attempt ${this.recoveryAttempts + 1}/${this.maxRecoveryAttempts}`);
-      this.recoveryAttempts++;
-      this.lastRecoveryTime = now;
-      this.init();
-    }
-
-    handleInitError() {
-      // Clean up any partial initialization
-      this.clearState();
-
-      // Attempt recovery
-      this.retryInit();
-    }
-
-    async getCredentials() {
-      // Add retry mechanism for credential fetching
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const creds = localStorage.getItem("jellyfin_credentials");
-          if (!creds) {
-            console.debug('[PauseScreen] No credentials found, retrying...');
-            // Wait before retry with exponential backoff
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-            continue;
-          }
-
-          const parsed = JSON.parse(creds);
-          const server = parsed.Servers?.[0];
-          if (!server) {
-            console.debug('[PauseScreen] No server info found, retrying...');
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-            continue;
-          }
-
-          return { token: server.AccessToken, userId: server.UserId };
-        } catch (error) {
-          console.error('[PauseScreen] Error getting credentials:', error);
-          if (attempt === 2) return null;
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-        }
-      }
-      return null;
     }
 
     createOverlay() {
-      try {
-        // Create overlay structure
-        this.overlay = document.createElement("div");
-        this.overlay.id = "video-overlay";
-        this.overlay.setAttribute("role", "dialog");
-        this.overlay.setAttribute("aria-label", "Video Information");
-        this.overlay.setAttribute("aria-modal", "true");
-        this.overlay.setAttribute("tabindex", "-1");
+      // Add CSS styles
+      const style = document.createElement("style");
+      style.textContent = `
+                #video-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    z-index: 0;
+                    display: none;
+                    color: white;
+                    font-family: inherit;
+                }
 
-        this.overlayContent = document.createElement("div");
-        this.overlayContent.id = "overlay-content";
-        this.overlayContent.setAttribute("role", "document");
+                #overlay-content {
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    backdrop-filter: blur(5px);
+                }
 
-        // Create info container to hold both details and plot
-        const infoContainer = document.createElement("div");
-        infoContainer.className = "overlay-info-container";
+                #overlay-logo {
+                    position: absolute;
+                    max-width: 45vw;
+                    max-height: 20vh;
+                    width: auto;
+                    height: auto;
+                    top: 20vh;
+                    left: 8vw;
+                    display: block;
+                    object-fit: contain;
+                }
 
-        this.overlayDetails = document.createElement("div");
-        this.overlayDetails.id = "overlay-details";
-        this.overlayDetails.setAttribute("role", "heading");
-        this.overlayDetails.setAttribute("aria-level", "1");
+                #overlay-plot {
+                    position: absolute;
+                    top: 55vh;
+                    left: 8vw;
+                    max-width: 50vw;
+                    height: 50vh;
+                    display: block;
+                    font-size: 18px;
+                    line-height: 1.6;
+                    overflow-y: auto;
+                    text-align: left;
+                } 
 
-        this.overlayPlot = document.createElement("div");
-        this.overlayPlot.id = "overlay-plot";
-        this.overlayPlot.setAttribute("role", "article");
-        this.overlayPlot.setAttribute("aria-label", "Plot description");
+                #overlay-details {
+                    position: absolute;
+                    top: 45vh;
+                    left: 8vw;
+                    font-size: 16px;
+                    display: flex;
+                    gap: 2rem;
+                    align-items: center;
+                }
 
-        // Assemble overlay
-        infoContainer.appendChild(this.overlayDetails);
-        infoContainer.appendChild(this.overlayPlot);
-        this.overlayContent.appendChild(infoContainer);
-        this.overlay.appendChild(this.overlayContent);
+                #overlay-disc {
+                    position: absolute;
+                    top: calc(50vh - (26vw / 2));
+                    right: 5vw;
+                    width: 26vw;
+                    height: auto;
+                    display: block;
+                    animation: 30s linear infinite spin;
+                    z-index: 1;
+                    filter: brightness(80%);
+                }
 
-        document.body.appendChild(this.overlay);
-      } catch (error) {
-        console.error('[PauseScreen] Error creating overlay:', error);
-        return;
-      }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
 
-      // Store previous focus before showing overlay
-      this.previousActiveElement = null;
+                /* Tablet and smaller desktop screens */
+                @media (max-width: 1400px) {
+                    #overlay-logo {
+                        max-width: 40vw;
+                        left: 6vw;
+                        top: 18vh;
+                    }
 
-      // Add keyboard event handler
-      this.overlay.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          this.hideOverlay();
-          if (this.currentVideo?.paused) {
-            this.currentVideo.play();
-          }
-        }
-      });
+                    #overlay-details {
+                        left: 6vw;
+                        top: 42vh;
+                        font-size: 16px;
+                    }
+
+                    #overlay-plot {
+                        top: 50vh;
+                        left: 6vw;
+                        max-width: 48vw;
+                        font-size: 16px;
+                    }
+
+                    #overlay-disc {
+                        width: 24vw;
+                        top: calc(50vh - (24vw / 2));
+                        right: 4vw;
+                    }
+                }
+
+                /* Tablet screens */
+                @media (max-width: 768px) {
+                    #overlay-logo {
+                        max-width: 70vw;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        top: 12vh;
+                    }
+
+                    #overlay-details {
+                        left: 50%;
+                        transform: translateX(-50%);
+                        top: 32vh;
+                        font-size: 14px;
+                        justify-content: center;
+                    }
+
+                    #overlay-plot {
+                        top: 40vh;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        max-width: 85vw;
+                        text-align: center;
+                        font-size: 15px;
+                        height: 45vh;
+                    }
+
+                    #overlay-disc {
+                        width: 18vw;
+                        top: calc(50vh - (18vw / 2));
+                        right: 3vw;
+                    }
+                }
+
+                /* Mobile screens */
+                @media (max-width: 480px) {
+                    #overlay-logo {
+                        max-width: 80vw;
+                        top: 10vh;
+                    }
+
+                    #overlay-details {
+                        top: 26vh;
+                        font-size: 12px;
+                        gap: 0.8rem;
+                        flex-wrap: wrap;
+                    }
+
+                    #overlay-plot {
+                        top: 34vh;
+                        max-width: 90vw;
+                        font-size: 14px;
+                        height: 50vh;
+                    }
+
+                    #overlay-disc {
+                        width: 16vw;
+                        top: calc(50vh - (16vw / 2));
+                        right: 2vw;
+                    }
+                }
+
+                /* Very small mobile screens */
+                @media (max-width: 360px) {
+                    #overlay-logo {
+                        max-width: 85vw;
+                        top: 8vh;
+                    }
+
+                    #overlay-details {
+                        top: 22vh;
+                        font-size: 11px;
+                        gap: 0.6rem;
+                    }
+
+                    #overlay-plot {
+                        top: 30vh;
+                        max-width: 95vw;
+                        font-size: 13px;
+                        height: 55vh;
+                    }
+
+                    #overlay-disc {
+                        width: 14vw;
+                        top: calc(50vh - (14vw / 2));
+                        right: 1vw;
+                    }
+                }
+
+                #overlay-logo:not([src]),
+                #overlay-disc:not([src]) {
+                    display: none;
+                }
+
+                .videoOsdBottom {
+                    z-index: 1 !important;
+                }
+
+                video {
+                    z-index: -1 !important;
+                }
+            `;
+      document.head.appendChild(style);
+
+      // Create overlay structure
+      this.overlay = document.createElement("div");
+      this.overlay.id = "video-overlay";
+
+      this.overlayContent = document.createElement("div");
+      this.overlayContent.id = "overlay-content";
+
+      this.overlayLogo = document.createElement("img");
+      this.overlayLogo.id = "overlay-logo";
+
+      this.overlayPlot = document.createElement("div");
+      this.overlayPlot.id = "overlay-plot";
+
+      this.overlayDetails = document.createElement("div");
+      this.overlayDetails.id = "overlay-details";
+
+      this.overlayDisc = document.createElement("img");
+      this.overlayDisc.id = "overlay-disc";
+
+      // Assemble overlay
+      this.overlayContent.appendChild(this.overlayLogo);
+      this.overlayContent.appendChild(this.overlayDetails);
+      this.overlayContent.appendChild(this.overlayPlot);
+      this.overlay.appendChild(this.overlayContent);
+      this.overlay.appendChild(this.overlayDisc);
+
+      document.body.appendChild(this.overlay);
 
       // Add click handler to unpause when clicking on overlay
       this.overlay.addEventListener('click', (event) => {
@@ -184,7 +318,6 @@
           }
         }
       });
-
       // Add touch event listener
       this.overlay.addEventListener('touchstart', (event) => {
         if (event.target === this.overlay || event.target === this.overlayContent) {
@@ -194,63 +327,21 @@
           }
         }
       });
-
-      // Add mousemove listener
-      this.overlay.addEventListener('mousemove', (event) => {
-        if (event.target === this.overlay || event.target === this.overlayContent) {
-          this.hideOverlay();
-        }
-      });
     }
 
     setupVideoObserver() {
-      try {
-        // Cleanup existing observer if any
-        if (this.observer) {
-          this.observer.disconnect();
-          this.observer = null;
-        }
-
-        // Create new observer with error recovery
-        this.observer = new MutationObserver(() => {
-          try {
-            this.checkForVideoChanges();
-          } catch (error) {
-            console.error('[PauseScreen] Error in video observer:', error);
-            // Reset state and try to recover
-            this.clearState();
-            // Attempt to reconnect observer
-            this.reconnectObserver();
-          }
-        });
-
-        this.observer.observe(document.body, {
-          childList: true,
-          subtree: true
-        });
-
-        // Initial check with recovery
+      // Use MutationObserver for better performance than continuous polling
+      this.observer = new MutationObserver(() => {
         this.checkForVideoChanges();
-      } catch (error) {
-        console.error('[PauseScreen] Error setting up video observer:', error);
-        // Attempt to recover by retrying after delay
-        setTimeout(() => this.setupVideoObserver(), 5000);
-      }
-    }
+      });
 
-    async reconnectObserver() {
-      console.debug('[PauseScreen] Attempting to reconnect observer');
+      this.observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
 
-      // Wait a bit before trying to reconnect
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      try {
-        this.setupVideoObserver();
-      } catch (error) {
-        console.error('[PauseScreen] Failed to reconnect observer:', error);
-        // Try again after longer delay
-        setTimeout(() => this.reconnectObserver(), 5000);
-      }
+      // Initial check
+      this.checkForVideoChanges();
     }
 
     checkForVideoChanges() {
@@ -264,33 +355,14 @@
     }
 
     async handleVideoChange(video) {
-      try {
-        this.clearState();
-        this.currentVideo = video;
-        this.cleanupListeners = this.attachVideoListeners(video);
+      this.clearState();
+      this.currentVideo = video;
+      this.cleanupListeners = this.attachVideoListeners(video);
 
-        // Retry getting itemId with exponential backoff
-        let itemId = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          itemId = this.checkForItemId(true);
-          if (itemId) break;
-
-          console.debug(`[PauseScreen] ItemId not found, retry attempt ${attempt + 1}`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-        }
-
-        if (itemId) {
-          this.currentItemId = itemId;
-          await this.fetchItemInfo(itemId);
-        } else {
-          console.debug('[PauseScreen] Failed to get itemId after retries');
-        }
-      } catch (error) {
-        console.error('[PauseScreen] Error in handleVideoChange:', error);
-        // Reset state and try to recover
-        this.clearState();
-        // Reinitialize video observer
-        this.setupVideoObserver();
+      const itemId = this.checkForItemId(true);
+      if (itemId) {
+        this.currentItemId = itemId;
+        await this.fetchItemInfo(itemId);
       }
     }
 
@@ -319,221 +391,48 @@
     }
 
     attachVideoListeners(video) {
-      const videoContainer = document.querySelector('.videoPlayerContainer');
-      const videoOsdPage = document.querySelector('#videoOsdPage');
-
-      this.currentContainer = videoContainer;
-
-      // Set up periodic container verification
-      this.containerCheckInterval = setInterval(() => {
-        if (!this.currentContainer || !document.body.contains(this.currentContainer)) {
-          this.handleVideoChange(this.currentVideo);
-        }
-      }, 1000);
-
-      let mouseMoveListener = null;
-
-      // Create a single debounced function instance for the video's lifetime
-      const handleMouseMove = (() => {
-        let timeout = null;
-        return () => {
-          if (timeout) {
-            clearTimeout(timeout);
-          }
-
-          // Use RAF for smoother performance
-          requestAnimationFrame(() => {
-            timeout = setTimeout(() => {
-              if (this.overlayVisible) {
-                this.hideOverlay();
-              }
-              this.lastMouseMovement = Date.now();
-              // Only start timer if video is still paused
-              if (video.paused && video === this.currentVideo) {
-                this.startOverlayTimer();
-              }
-              timeout = null;
-            }, 150); // Debounce time
-          });
-        };
-      })();
-
-      const addMouseMoveListener = () => {
-        if (!mouseMoveListener) {
-          mouseMoveListener = handleMouseMove;
-          // Add listener to both videoContainer and videoOsdPage
-          if (videoContainer) {
-            videoContainer.addEventListener("mousemove", mouseMoveListener);
-          }
-          if (videoOsdPage) {
-            videoOsdPage.addEventListener("mousemove", mouseMoveListener);
-          }
-        }
-      };
-
-      const removeMouseMoveListener = () => {
-        if (mouseMoveListener) {
-          if (videoContainer) {
-            videoContainer.removeEventListener("mousemove", mouseMoveListener);
-          }
-          if (videoOsdPage) {
-            videoOsdPage.removeEventListener("mousemove", mouseMoveListener);
-          }
-          mouseMoveListener = null;
-        }
-        if (mouseMoveTimeout) {
-          clearTimeout(mouseMoveTimeout);
-          mouseMoveTimeout = null;
-        }
-      };
-
       const handlePause = () => {
         if (video === this.currentVideo && !video.ended) {
-          addMouseMoveListener();
           const newItemId = this.checkForItemId(true);
           if (newItemId && newItemId !== this.currentItemId) {
             this.currentItemId = newItemId;
             this.fetchItemInfo(newItemId);
           }
-          this.startOverlayTimer();
+          this.showOverlay();
         }
       };
 
       const handlePlay = () => {
         if (video === this.currentVideo) {
-          removeMouseMoveListener();
           this.hideOverlay();
-          this.clearOverlayTimer();
         }
-      };
-
-      const handleMouseEnter = () => {
-        this.mouseOverVideo = true;
-        this.startOverlayTimer();
-      };
-
-      const handleMouseLeave = () => {
-        this.mouseOverVideo = false;
-        this.startOverlayTimer();
       };
 
       video.addEventListener("pause", handlePause);
       video.addEventListener("play", handlePlay);
-      video.addEventListener("mouseenter", handleMouseEnter);
-      video.addEventListener("mouseleave", handleMouseLeave);
-
-      if (video.paused) {
-        addMouseMoveListener();
-      }
 
       return () => {
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("play", handlePlay);
-        video.removeEventListener("mouseenter", handleMouseEnter);
-        video.removeEventListener("mouseleave", handleMouseLeave);
-        removeMouseMoveListener();
       };
     }
 
-    startOverlayTimer() {
-      this.clearOverlayTimer();
-
-      // Set timer to show overlay after 10 seconds if:
-      // 1. Video is paused AND no mouse movement for 10s
-      this.overlayTimer = setTimeout(() => {
-        const timeSinceLastMovement = Date.now() - this.lastMouseMovement;
-        if (this.currentVideo?.paused && timeSinceLastMovement >= 10000) {
-          this.showOverlay();
-        }
-      }, 10000);
-    }
-
-    clearOverlayTimer() {
-      if (this.overlayTimer) {
-        clearTimeout(this.overlayTimer);
-        this.overlayTimer = null;
-      }
-    }
-
     showOverlay() {
-      if (this.pendingTransition) {
-        return;
-      }
-
-      this.overlayVisible = true;
-      this.pendingTransition = true;
-
-      // Store the currently focused element
-      this.previousActiveElement = document.activeElement;
-
-      // Make the main content inaccessible to screen readers
-      document.body.setAttribute('aria-hidden', 'true');
-
-      // Remove aria-hidden from the overlay
-      this.overlay.removeAttribute('aria-hidden');
-
-      // First make element visible without transition
       this.overlay.style.display = "flex";
-      this.overlay.style.opacity = "0";
-
-      // Force browser to process display change
-      void this.overlay.offsetWidth;
-
-      // Now add visible class to trigger transition
-      requestAnimationFrame(() => {
-        this.overlay.classList.add('visible');
-        this.overlay.style.opacity = "";
-
-        // Focus the overlay for keyboard navigation
-        this.overlay.focus();
-
-        setTimeout(() => {
-          this.pendingTransition = false;
-        }, 300);
-      });
     }
 
     hideOverlay() {
-      this.clearOverlayTimer();
-
-      if (!this.overlayVisible || this.pendingTransition) {
-        return;
-      }
-
-      this.pendingTransition = true;
-      this.overlayVisible = false;
-
-      // Remove visible class to trigger transition
-      this.overlay.classList.remove('visible');
-
-      // Make the main content accessible again to screen readers
-      document.body.removeAttribute('aria-hidden');
-
-      // Hide overlay from screen readers
-      this.overlay.setAttribute('aria-hidden', 'true');
-
-      // Restore focus to the previous element
-      if (this.previousActiveElement && document.body.contains(this.previousActiveElement)) {
-        this.previousActiveElement.focus();
-        this.previousActiveElement = null;
-      }
-
-      // Wait for transition to complete before hiding
-      setTimeout(() => {
-        if (!this.overlayVisible) {
-          this.overlay.style.display = "none";
-          this.pendingTransition = false;
-        }
-      }, 300);
+      this.overlay.style.display = "none";
     }
 
     clearDisplayData() {
       this.overlayPlot.textContent = "";
       this.overlayDetails.innerHTML = "";
+      this.overlayLogo.removeAttribute('src');
+      this.overlayDisc.removeAttribute('src');
     }
 
     async fetchItemInfo(itemId) {
-      console.debug('[PauseScreen] Fetching item info for:', itemId);
       this.clearDisplayData();
 
       try {
@@ -542,10 +441,9 @@
           headers: { "X-Emby-Token": this.token }
         });
 
-        console.debug('[PauseScreen] Successfully fetched item info:', item.Type);
-        this.displayItemInfo(item);
+        await this.displayItemInfo(item, domain, itemId);
       } catch (error) {
-        console.debug('[PauseScreen] Error fetching item info:', error);
+        console.error("Error fetching item info:", error);
         this.overlayPlot.textContent = "Unable to fetch item info.";
       }
     }
@@ -565,161 +463,139 @@
       }
     }
 
-    displayItemInfo(item) {
-      console.debug('[PauseScreen] Displaying item info for type:', item.Type);
+    async displayItemInfo(item, domain, itemId) {
+      // Display basic info
+      const year = item.ProductionYear || "";
+      const rating = item.OfficialRating || "";
+      const runtime = this.formatRuntime(item.RunTimeTicks);
 
-      // Create the content structure with ARIA live region for dynamic updates
-      this.overlayDetails.innerHTML = `
-        <div class="watching-label" aria-live="polite">You're watching</div>
-      `;
+      this.overlayDetails.innerHTML = [
+        year && `<span>${year}</span>`,
+        rating && `<span class="mediaInfoOfficialRating" rating="${rating}">${rating}</span>`,
+        runtime && `<span>${runtime}</span>`
+      ].filter(Boolean).join('');
 
-      // Handle Series vs Movie
-      if (item.Type === 'Episode') {
-        const seriesName = item.SeriesName || '';
-        const seasonNumber = item.ParentIndexNumber || '';
-        const episodeNumber = item.IndexNumber || '';
-        const episodeName = item.Name || '';
+      this.overlayPlot.textContent = item.Overview || "No description available";
 
-        const episodeDescription = `${seriesName}, Season ${seasonNumber}, Episode ${episodeNumber}: ${episodeName}`;
-        this.overlay.setAttribute('aria-label', `Video Information - ${episodeDescription}`);
-
-        this.overlayDetails.innerHTML += `
-          <div class="content-title" aria-label="${seriesName}">${seriesName}</div>
-          ${seasonNumber ? `<div class="season-info" aria-label="Season ${seasonNumber}">Season ${seasonNumber}</div>` : ''}
-          ${episodeNumber ? `<div class="episode-info" aria-label="${episodeName}, Episode ${episodeNumber}">${episodeName}: Ep. ${episodeNumber}</div>` : ''}
-        `;
-      } else {
-        // Movie or other content
-        const title = item.Name || '';
-        this.overlay.setAttribute('aria-label', `Video Information - ${title}`);
-        this.overlayDetails.innerHTML += `
-          <div class="content-title" aria-label="${title}">${title}</div>
-        `;
-      }
-
-      // Set overview/plot with ARIA description
-      const overview = item.Overview || 'No description available';
-      this.overlayPlot.textContent = overview;
-      this.overlayPlot.setAttribute('aria-label', `Plot: ${overview}`);
+      // Load images concurrently
+      await Promise.allSettled([
+        this.loadLogo(item, domain, itemId),
+        this.loadDisc(item, domain, itemId)
+      ]);
     }
 
+    formatRuntime(runTimeTicks) {
+      if (!runTimeTicks) return "";
+
+      const totalMinutes = Math.floor(runTimeTicks / 600000000);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    }
+
+    async loadLogo(item, domain, itemId) {
+      const logoUrls = this.getLogoUrls(item, domain, itemId);
+
+      for (const url of logoUrls) {
+        if (await this.tryLoadImage(url)) {
+          this.overlayLogo.src = url;
+          return;
+        }
+      }
+    }
+
+    async loadDisc(item, domain, itemId) {
+      const discUrls = this.getDiscUrls(item, domain, itemId);
+
+      for (const url of discUrls) {
+        if (await this.tryLoadImage(url)) {
+          this.overlayDisc.src = url;
+          return;
+        }
+      }
+    }
+
+    getLogoUrls(item, domain, itemId) {
+      const urls = [];
+
+      if (item.ImageTags?.Logo) {
+        urls.push(`${domain}/Items/${itemId}/Images/Logo?tag=${item.ImageTags.Logo}`);
+      }
+
+      if (item.ParentId) {
+        urls.push(`${domain}/Items/${item.ParentId}/Images/Logo`);
+      }
+
+      if (item.SeriesId) {
+        urls.push(`${domain}/Items/${item.SeriesId}/Images/Logo`);
+      }
+
+      return urls;
+    }
+
+    getDiscUrls(item, domain, itemId) {
+      const urls = [`${domain}/Items/${itemId}/Images/Disc`];
+
+      if (item.ParentId) {
+        urls.push(`${domain}/Items/${item.ParentId}/Images/Disc`);
+      }
+
+      if (item.SeriesId) {
+        urls.push(`${domain}/Items/${item.SeriesId}/Images/Disc`);
+      }
+
+      return urls;
+    }
+
+    async tryLoadImage(url) {
+      if (this.imageCache.has(url)) {
+        return this.imageCache.get(url);
+      }
+
+      try {
+        const img = new Image();
+        const loaded = new Promise((resolve, reject) => {
+          img.onload = () => resolve(true);
+          img.onerror = () => reject(false);
+          setTimeout(() => reject(false), 3000);
+        });
+
+        img.src = url;
+        const result = await loaded;
+        this.imageCache.set(url, result);
+        return result;
+      } catch {
+        this.imageCache.set(url, false);
+        return false;
+      }
+    }
 
     clearState() {
-      try {
-        // Clear overlay and display
-        this.hideOverlay();
-        this.clearDisplayData();
+      this.hideOverlay();
+      this.clearDisplayData();
 
-        // Clean up event listeners
-        if (this.cleanupListeners) {
-          this.cleanupListeners();
-          this.cleanupListeners = null;
-        }
-
-        // Clear intervals
-        if (this.containerCheckInterval) {
-          clearInterval(this.containerCheckInterval);
-          this.containerCheckInterval = null;
-        }
-
-        // Reset state
-        this.mouseOverVideo = true;
-        this.overlayVisible = false;
-        this.pendingTransition = false;
-        this.lastMouseMovement = Date.now();
-
-        this.currentItemId = null;
-        this.currentVideo = null;
-        this.currentContainer = null;
-
-        // Clean up orphaned elements
-        this.cleanupOrphanedElements();
-      } catch (error) {
-        console.error('[PauseScreen] Error in clearState:', error);
-        // If clearState fails, attempt maximum cleanup
-        this.destroy();
-        // Attempt to reinitialize if necessary
-        if (this.recoveryAttempts < this.maxRecoveryAttempts) {
-          console.debug('[PauseScreen] Attempting recovery after clearState failure');
-          this.retryInit();
-        }
+      if (this.cleanupListeners) {
+        this.cleanupListeners();
+        this.cleanupListeners = null;
       }
-    }
 
-    cleanupOrphanedElements() {
-      // Remove any duplicate overlay elements
-      const orphanedOverlays = document.querySelectorAll('#video-overlay');
-      orphanedOverlays.forEach(overlay => {
-        if (overlay !== this.overlay && overlay.parentNode) {
-          console.debug('[PauseScreen] Removing orphaned overlay');
-          overlay.parentNode.removeChild(overlay);
-        }
-      });
+      this.currentItemId = null;
+      this.currentVideo = null;
     }
 
     destroy() {
-      try {
-        console.debug('[PauseScreen] Destroying pause screen');
+      this.clearState();
 
-        // Clear state first to stop any ongoing operations
-        this.clearState();
+      if (this.observer) {
+        this.observer.disconnect();
+        this.observer = null;
+      }
 
-        // Clean up observer with error handling
-        if (this.observer) {
-          try {
-            console.debug('[PauseScreen] Disconnecting observer');
-            this.observer.disconnect();
-          } catch (error) {
-            console.error('[PauseScreen] Error disconnecting observer:', error);
-          } finally {
-            this.observer = null;
-          }
-        }
+      this.imageCache.clear();
 
-        // Clean up intervals
-        if (this.containerCheckInterval) {
-          try {
-            clearInterval(this.containerCheckInterval);
-          } catch (error) {
-            console.error('[PauseScreen] Error clearing container interval:', error);
-          } finally {
-            this.containerCheckInterval = null;
-          }
-        }
-
-        // Clean up DOM elements
-        if (this.overlay?.parentNode) {
-          try {
-            console.debug('[PauseScreen] Removing overlay from DOM');
-            this.overlay.parentNode.removeChild(this.overlay);
-          } catch (error) {
-            console.error('[PauseScreen] Error removing overlay:', error);
-            // Fallback cleanup attempt
-            this.overlay.style.display = 'none';
-          } finally {
-            this.overlay = null;
-          }
-        }
-
-        // Final cleanup of any remaining timeouts
-        if (this.overlayTimer) {
-          clearTimeout(this.overlayTimer);
-          this.overlayTimer = null;
-        }
-
-        if (this.mouseMoveTimeout) {
-          clearTimeout(this.mouseMoveTimeout);
-          this.mouseMoveTimeout = null;
-        }
-      } catch (error) {
-        console.error('[PauseScreen] Fatal error during cleanup:', error);
-        // Attempt one final forced cleanup
-        try {
-          this.observer?.disconnect();
-          this.overlay?.parentNode?.removeChild(this.overlay);
-        } catch {
-          // Ignore any errors in final cleanup
-        }
+      if (this.overlay?.parentNode) {
+        this.overlay.parentNode.removeChild(this.overlay);
       }
     }
   }
