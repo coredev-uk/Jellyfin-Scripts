@@ -26,6 +26,7 @@
       // Timers and observers
       this.observer = null;
       this.overlayTimer = null;
+      this.mouseMoveTimeout = null;
       this.lastMouseMovement = Date.now();
 
       // Recovery state
