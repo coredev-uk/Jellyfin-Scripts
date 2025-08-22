@@ -1,5 +1,6 @@
 /*
- * Jellyfin Pause Screen script by BobHasNoSoul 
+ * Jellyfin Pause Screen script by BobHasNoSoul modified by n00bcodr
+ * Modified (again) to match Netflix style by Core
  * Source: https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js
  * Original: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen
  */
@@ -21,35 +22,110 @@
  * Keep simplicity and syncrounous, add comments where appropriate, remove redundant stuff
  */
 
+/**
+ * Jellyfin Item
+ * @typedef {Object} Item
+ * @property {string} Name - The name of the item.
+ * @property {string} ServerId - The server ID associated with the item.
+ * @property {string} Id - The unique identifier for the item.
+ * @property {string} Etag - The ETag for the item.
+ * @property {string} DateCreated - The creation date of the item.
+ * @property {boolean} CanDelete - Indicates if the item can be deleted.
+ * @property {boolean} CanDownload - Indicates if the item can be downloaded.
+ * @property {boolean} HasSubtitles - Indicates if the item has subtitles.
+ * @property {string} Container - The container format of the item.
+ * @property {string} SortName - The sort name of the item.
+ * @property {Array} BackdropImageTags - Array of backdrop image tags.
+ * @property {Array} Chapters - Array of chapters in the item.
+ * @property {string} DisplayPreferencesId - The display preferences ID.
+ * @property {boolean} EnableMediaSourceDisplay - Indicates if media source display is enabled.
+ * @property {Array} ExternalUrls - Array of external URLs related to the item.
+ * @property {Array} GenreItems - Array of genre items.
+ * @property {Array<string>} Genres - Array of genre names.
+ * @property {number} Height - The height of the video.
+ * @property {Object} ImageBlurHashes - Object containing blur hashes for images.
+ * @property {Object} ImageTags - Object containing image tags.
+ * @property {number} IndexNumber - The index number of the item.
+ * @property {boolean} IsFolder - Indicates if the item is a folder.
+ * @property {boolean} IsHD - Indicates if the item is in HD.
+ * @property {string} LocationType - The location type of the item.
+ * @property {boolean} LockData - Indicates if the item data is locked.
+ * @property {Array} LockedFields - Array of locked fields.
+ * @property {Array} MediaSources - Array of media sources.
+ * @property {Array} MediaStreams - Array of media streams.
+ * @property {string} MediaType - The media type of the item.
+ * @property {string} Overview - The overview or description of the item.
+ * @property {Array<string>} ParentBackdropImageTags - Array of parent backdrop image tags.
+ * @property {string} ParentBackdropItemId - The parent backdrop item ID.
+ * @property {string} ParentId - The parent ID of the item.
+ * @property {number} ParentIndexNumber - The parent index number.
+ * @property {string} ParentLogoImageTag - The parent logo image tag.
+ * @property {string} ParentLogoItemId - The parent logo item ID.
+ * @property {string} ParentThumbImageTag - The parent thumbnail image tag.
+ * @property {string} ParentThumbItemId - The parent thumbnail item ID.
+ * @property {string} Path - The file path of the item.
+ * @property {Array} People - Array of people associated with the item.
+ * @property {string} PlayAccess - The play access level of the item.
+ * @property {string} PremiereDate - The premiere date of the item.
+ * @property {number} PrimaryImageAspectRatio - The aspect ratio of the primary image.
+ * @property {number} ProductionYear - The production year of the item.
+ * @property {Object} ProviderIds - Object containing provider IDs.
+ * @property {Array} RemoteTrailers - Array of remote trailers.
+ * @property {number} RunTimeTicks - The runtime of the item in ticks.
+ * @property {string} SeasonId - The season ID of the item.
+ * @property {string} SeasonName - The season name of the item.
+ * @property {string} SeriesId - The series ID of the item.
+ * @property {string} SeriesName - The series name of the item.
+ * @property {string} SeriesPrimaryImageTag - The series primary image tag.
+ * @property {string} SeriesStudio - The studio of the series.
+ * @property {string} SortName - The sort name of the item.
+ * @property {number} SpecialFeatureCount - The count of special features.
+ * @property {Array} Studios - Array of studios associated with the item.
+ * @property {Array} Taglines - Array of taglines.
+ * @property {Array} Tags - Array of tags.
+ * @property {Object} Trickplay - Object containing trickplay data.
+ * @property {string} Type - The type of the item.
+ * @property {Object} UserData - Object containing user data.
+ * @property {string} VideoType - The video type of the item.
+ * @property {number} Width - The width of the video.
+ */
+
 (function () {
   'use strict';
 
   class JellyfinPauseScreen {
     constructor() {
-      this.currentVideo = null;
+
+      // Video and item tracking
       this.currentItemId = null;
+
+      // Auth
       this.userId = null;
       this.token = null;
+
+      // State helpers
+      this.lastMouseMove = 0;
       this.lastItemIdCheck = 0;
       this.cleanupListeners = null;
-      this.imageCache = new Map();
       this.observer = null;
+      this.invalidOverlay = false;
 
       // DOM elements
       this.overlay = null;
       this.overlayContent = null;
-      this.overlayLogo = null;
-      this.overlayPlot = null;
-      this.overlayDetails = null;
-      this.overlayDisc = null;
+      this.currentVideo = null;
 
       this.init();
+    }
+
+    log(type, msg) {
+      console[type](`[PauseOverlay] ${msg}`);
     }
 
     init() {
       const credentials = this.getCredentials();
       if (!credentials) {
-        console.error("Jellyfin credentials not found");
+        log("error", "Jellyfin credentials not found");
         return;
       }
 
@@ -74,211 +150,63 @@
     }
 
     createOverlay() {
-      // Add CSS styles
       const style = document.createElement("style");
       style.textContent = `
-                #video-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.8);
-                    z-index: 0;
-                    display: none;
-                    color: white;
-                    font-family: inherit;
-                }
+            #video-overlay {
+                height: 100%;
+                width: 100%;
+                background: rgba(0, 0, 0, .5);
+                position: relative;
+            }
 
-                #overlay-content {
-                    position: relative;
-                    width: 100%;
-                    height: 100%;
-                    backdrop-filter: blur(5px);
-                }
+            .overlay-content {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              color: white;
+              height: 100%;
+              width: 100%;
+              padding: 12%;
+            }
 
-                #overlay-logo {
-                    position: absolute;
-                    max-width: 45vw;
-                    max-height: 20vh;
-                    width: auto;
-                    height: auto;
-                    top: 20vh;
-                    left: 8vw;
-                    display: block;
-                    object-fit: contain;
-                }
+            .header-subtitle {
+              font-size: 1.8rem;
+              margin-left: 0.4rem;
+              font-weight: 400;
+              color: rgb(204, 204, 204);
+            }
 
-                #overlay-plot {
-                    position: absolute;
-                    top: 55vh;
-                    left: 8vw;
-                    max-width: 50vw;
-                    height: 50vh;
-                    display: block;
-                    font-size: 18px;
-                    line-height: 1.6;
-                    overflow-y: auto;
-                    text-align: left;
-                } 
+            .header {
+              font-size: 5.4rem;
+              color: white;
+              font-weight: 500;
+              margin-top: 0;
+              margin-bottom: 0;
+            }
 
-                #overlay-details {
-                    position: absolute;
-                    top: 45vh;
-                    left: 8vw;
-                    font-size: 16px;
-                    display: flex;
-                    gap: 2rem;
-                    align-items: center;
-                }
+            .season-title {
+              font-size: 2.4rem;
+              margin: 0.4rem 0 0;
+              color: white;
+              font-weight: 500;
+            }
 
-                #overlay-disc {
-                    position: absolute;
-                    top: calc(50vh - (26vw / 2));
-                    right: 5vw;
-                    width: 26vw;
-                    height: auto;
-                    display: block;
-                    animation: 30s linear infinite spin;
-                    z-index: 1;
-                    filter: brightness(80%);
-                }
+            .episode-title {
+              font-size: 2.4rem;
+              margin: 2.4rem 0 1.2rem;
+              color: white;
+              font-weight: 500;
+            }
 
-                @keyframes spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                /* Tablet and smaller desktop screens */
-                @media (max-width: 1400px) {
-                    #overlay-logo {
-                        max-width: 40vw;
-                        left: 6vw;
-                        top: 18vh;
-                    }
-
-                    #overlay-details {
-                        left: 6vw;
-                        top: 42vh;
-                        font-size: 16px;
-                    }
-
-                    #overlay-plot {
-                        top: 50vh;
-                        left: 6vw;
-                        max-width: 48vw;
-                        font-size: 16px;
-                    }
-
-                    #overlay-disc {
-                        width: 24vw;
-                        top: calc(50vh - (24vw / 2));
-                        right: 4vw;
-                    }
-                }
-
-                /* Tablet screens */
-                @media (max-width: 768px) {
-                    #overlay-logo {
-                        max-width: 70vw;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        top: 12vh;
-                    }
-
-                    #overlay-details {
-                        left: 50%;
-                        transform: translateX(-50%);
-                        top: 32vh;
-                        font-size: 14px;
-                        justify-content: center;
-                    }
-
-                    #overlay-plot {
-                        top: 40vh;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        max-width: 85vw;
-                        text-align: center;
-                        font-size: 15px;
-                        height: 45vh;
-                    }
-
-                    #overlay-disc {
-                        width: 18vw;
-                        top: calc(50vh - (18vw / 2));
-                        right: 3vw;
-                    }
-                }
-
-                /* Mobile screens */
-                @media (max-width: 480px) {
-                    #overlay-logo {
-                        max-width: 80vw;
-                        top: 10vh;
-                    }
-
-                    #overlay-details {
-                        top: 26vh;
-                        font-size: 12px;
-                        gap: 0.8rem;
-                        flex-wrap: wrap;
-                    }
-
-                    #overlay-plot {
-                        top: 34vh;
-                        max-width: 90vw;
-                        font-size: 14px;
-                        height: 50vh;
-                    }
-
-                    #overlay-disc {
-                        width: 16vw;
-                        top: calc(50vh - (16vw / 2));
-                        right: 2vw;
-                    }
-                }
-
-                /* Very small mobile screens */
-                @media (max-width: 360px) {
-                    #overlay-logo {
-                        max-width: 85vw;
-                        top: 8vh;
-                    }
-
-                    #overlay-details {
-                        top: 22vh;
-                        font-size: 11px;
-                        gap: 0.6rem;
-                    }
-
-                    #overlay-plot {
-                        top: 30vh;
-                        max-width: 95vw;
-                        font-size: 13px;
-                        height: 55vh;
-                    }
-
-                    #overlay-disc {
-                        width: 14vw;
-                        top: calc(50vh - (14vw / 2));
-                        right: 1vw;
-                    }
-                }
-
-                #overlay-logo:not([src]),
-                #overlay-disc:not([src]) {
-                    display: none;
-                }
-
-                .videoOsdBottom {
-                    z-index: 1 !important;
-                }
-
-                video {
-                    z-index: -1 !important;
-                }
+            .synopsis {
+              font-size: 1.8rem;
+              font-weight: 400;
+              color: rgb(204, 204, 204);
+              width: 60%;
+              margin: 0;
+            }
             `;
+
       document.head.appendChild(style);
 
       // Create overlay structure
@@ -286,47 +214,24 @@
       this.overlay.id = "video-overlay";
 
       this.overlayContent = document.createElement("div");
-      this.overlayContent.id = "overlay-content";
-
-      this.overlayLogo = document.createElement("img");
-      this.overlayLogo.id = "overlay-logo";
-
-      this.overlayPlot = document.createElement("div");
-      this.overlayPlot.id = "overlay-plot";
-
-      this.overlayDetails = document.createElement("div");
-      this.overlayDetails.id = "overlay-details";
-
-      this.overlayDisc = document.createElement("img");
-      this.overlayDisc.id = "overlay-disc";
+      this.overlayContent.classList.add("overlay-content")
 
       // Assemble overlay
-      this.overlayContent.appendChild(this.overlayLogo);
-      this.overlayContent.appendChild(this.overlayDetails);
-      this.overlayContent.appendChild(this.overlayPlot);
       this.overlay.appendChild(this.overlayContent);
-      this.overlay.appendChild(this.overlayDisc);
-
       document.body.appendChild(this.overlay);
 
+      const clickHandler = (event) => {
+        if (event.target === this.overlay || event.target === this.overlayHeader) {
+          this.hideOverlay();
+          if (this.currentVideo?.paused) {
+            this.currentVideo.play();
+          }
+        }
+      }
+
       // Add click handler to unpause when clicking on overlay
-      this.overlay.addEventListener('click', (event) => {
-        if (event.target === this.overlay || event.target === this.overlayContent) {
-          this.hideOverlay();
-          if (this.currentVideo?.paused) {
-            this.currentVideo.play();
-          }
-        }
-      });
-      // Add touch event listener
-      this.overlay.addEventListener('touchstart', (event) => {
-        if (event.target === this.overlay || event.target === this.overlayContent) {
-          this.hideOverlay();
-          if (this.currentVideo?.paused) {
-            this.currentVideo.play();
-          }
-        }
-      });
+      this.overlay.addEventListener('click', clickHandler);
+      this.overlay.addEventListener('touchstart', clickHandler);
     }
 
     setupVideoObserver() {
@@ -363,34 +268,31 @@
       if (itemId) {
         this.currentItemId = itemId;
         await this.fetchItemInfo(itemId);
+      } else {
+        this.invalidOverlay = true;
       }
     }
 
+    /**
+     * Checks and extracts the item ID from the video's poster URL.
+     */
     checkForItemId(force = false) {
       const now = Date.now();
       if (!force && now - this.lastItemIdCheck < 500) {
         return this.currentItemId;
       }
       this.lastItemIdCheck = now;
-
-      const selectors = [
-        '.videoOsdBottom-hidden > div:nth-child(1) > div:nth-child(4) > button:nth-child(3)',
-        'div.page:nth-child(3) > div:nth-child(3) > div:nth-child(1) > div:nth-child(4) > button:nth-child(3)',
-        '.btnUserRating'
-      ];
-
-      for (const selector of selectors) {
-        const ratingButton = document.querySelector(selector);
-        const dataId = ratingButton?.getAttribute('data-id');
-        if (dataId) {
-          return dataId;
-        }
-      }
-
-      return null;
+      const id = new URL(this.video.poster).pathname.split('Items/')[1].split('/')[0]
+      return id || null;
     }
 
     attachVideoListeners(video) {
+      // On pause, show the overlay after 10 seconds of no movement
+      const handleMove = (e) => {
+        this.lastMouseMove = Date.now();
+
+      }
+
       const handlePause = () => {
         if (video === this.currentVideo && !video.ended) {
           const newItemId = this.checkForItemId(true);
@@ -400,15 +302,22 @@
           }
           this.showOverlay();
         }
+
+        video.addEventListener("mousemove", handleMove)
+        video.addEventListener("touchmove", handleMove)
+
       };
 
       const handlePlay = () => {
         if (video === this.currentVideo) {
           this.hideOverlay();
         }
+
+        video.removeEventListener("mousemove", handleMove)
+        video.removeEventListener("touchmove", handleMove)
       };
 
-      video.addEventListener("pause", handlePause);
+      video.addEventListener("pause", handlePause)
       video.addEventListener("play", handlePlay);
 
       return () => {
@@ -418,6 +327,7 @@
     }
 
     showOverlay() {
+      if (this.invalidOverlay) return;
       this.overlay.style.display = "flex";
     }
 
@@ -426,10 +336,7 @@
     }
 
     clearDisplayData() {
-      this.overlayPlot.textContent = "";
-      this.overlayDetails.innerHTML = "";
-      this.overlayLogo.removeAttribute('src');
-      this.overlayDisc.removeAttribute('src');
+      this.overlayContent.textContent = "";
     }
 
     async fetchItemInfo(itemId) {
@@ -440,11 +347,10 @@
         const item = await this.fetchWithRetry(`${domain}/Items/${itemId}`, {
           headers: { "X-Emby-Token": this.token }
         });
-
-        await this.displayItemInfo(item, domain, itemId);
+        this.displayItemInfo(item);
       } catch (error) {
-        console.error("Error fetching item info:", error);
-        this.overlayPlot.textContent = "Unable to fetch item info.";
+        log("error", `Error fetching item info: ${error}`);
+        this.invalidOverlay = true;
       }
     }
 
@@ -463,25 +369,32 @@
       }
     }
 
-    async displayItemInfo(item, domain, itemId) {
-      // Display basic info
-      const year = item.ProductionYear || "";
-      const rating = item.OfficialRating || "";
-      const runtime = this.formatRuntime(item.RunTimeTicks);
+    /**
+     * A function to apply the item info to the overlay.
+     * @param {Item} item - The Jellyfin item object.
+     */
+    displayItemInfo(item) {
+      this.clearDisplayData();
 
-      this.overlayDetails.innerHTML = [
-        year && `<span>${year}</span>`,
-        rating && `<span class="mediaInfoOfficialRating" rating="${rating}">${rating}</span>`,
-        runtime && `<span>${runtime}</span>`
-      ].filter(Boolean).join('');
+      if (item.Type === "Episode") {
+        // Header
+        this.overlayContent.innerHTML += `<span class="header-subtitle">You're watching</span>`
+        this.overlayContent.innerHTML += `<h2 class="header">${item.SeriesName}</h2>`
+        this.overlayContent.innerHTML += `<h4 class="season-title">${item.SeasonName}</h4>`
 
-      this.overlayPlot.textContent = item.Overview || "No description available";
+        // Main content
+        this.overlayContent.innerHTML += `<h3 class="episode-title">${item.Name} (Ep. ${item.IndexNumber})</h3>`;
+        this.overlayContent.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+      } else if (item.Type === "Movie") {
+        this.overlayContent.innerHTML += `<span class="header-subtitle">You're watching</span>`
+        this.overlayContent.innerHTML += `<h2 class="header">${item.Name}</h2>`
 
-      // Load images concurrently
-      await Promise.allSettled([
-        this.loadLogo(item, domain, itemId),
-        this.loadDisc(item, domain, itemId)
-      ]);
+        // Main content
+        this.overlayContent.innerHTML += `<h3 class="episode-title">${item.ProductionYear || ""} <span class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</span> ${this.formatRuntime(item.RunTimeTicks) || ""}</h3>`;
+        this.overlayContent.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+      } else {
+        // TODO: Don't show the overlay for unsupported types
+      }
     }
 
     formatRuntime(runTimeTicks) {
@@ -494,86 +407,10 @@
       return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
     }
 
-    async loadLogo(item, domain, itemId) {
-      const logoUrls = this.getLogoUrls(item, domain, itemId);
-
-      for (const url of logoUrls) {
-        if (await this.tryLoadImage(url)) {
-          this.overlayLogo.src = url;
-          return;
-        }
-      }
-    }
-
-    async loadDisc(item, domain, itemId) {
-      const discUrls = this.getDiscUrls(item, domain, itemId);
-
-      for (const url of discUrls) {
-        if (await this.tryLoadImage(url)) {
-          this.overlayDisc.src = url;
-          return;
-        }
-      }
-    }
-
-    getLogoUrls(item, domain, itemId) {
-      const urls = [];
-
-      if (item.ImageTags?.Logo) {
-        urls.push(`${domain}/Items/${itemId}/Images/Logo?tag=${item.ImageTags.Logo}`);
-      }
-
-      if (item.ParentId) {
-        urls.push(`${domain}/Items/${item.ParentId}/Images/Logo`);
-      }
-
-      if (item.SeriesId) {
-        urls.push(`${domain}/Items/${item.SeriesId}/Images/Logo`);
-      }
-
-      return urls;
-    }
-
-    getDiscUrls(item, domain, itemId) {
-      const urls = [`${domain}/Items/${itemId}/Images/Disc`];
-
-      if (item.ParentId) {
-        urls.push(`${domain}/Items/${item.ParentId}/Images/Disc`);
-      }
-
-      if (item.SeriesId) {
-        urls.push(`${domain}/Items/${item.SeriesId}/Images/Disc`);
-      }
-
-      return urls;
-    }
-
-    async tryLoadImage(url) {
-      if (this.imageCache.has(url)) {
-        return this.imageCache.get(url);
-      }
-
-      try {
-        const img = new Image();
-        const loaded = new Promise((resolve, reject) => {
-          img.onload = () => resolve(true);
-          img.onerror = () => reject(false);
-          setTimeout(() => reject(false), 3000);
-        });
-
-        img.src = url;
-        const result = await loaded;
-        this.imageCache.set(url, result);
-        return result;
-      } catch {
-        this.imageCache.set(url, false);
-        return false;
-      }
-    }
-
     clearState() {
       this.hideOverlay();
       this.clearDisplayData();
+      this.invalidOverlay = false;
 
       if (this.cleanupListeners) {
         this.cleanupListeners();
@@ -591,8 +428,6 @@
         this.observer.disconnect();
         this.observer = null;
       }
-
-      this.imageCache.clear();
 
       if (this.overlay?.parentNode) {
         this.overlay.parentNode.removeChild(this.overlay);
