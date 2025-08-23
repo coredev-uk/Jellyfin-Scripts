@@ -17,33 +17,11 @@
       this.isShowing = false;
       this.dom = null;
       this.content = null;
-      this.block = false;
+
+      this.init();
     }
 
-    show() {
-      if (this.block || !this.dom) return;
-      log("debug", "Showing overlay")
-      this.dom.style.display = 'block';
-    }
-
-    hide() {
-      if (!this.dom) return;
-      log("debug", "Hiding overlay")
-      this.dom.style.display = 'none';
-    }
-
-    clear() {
-      if (!this.content) return;
-      log("debug", "Clearing")
-      this.hide();
-      this.content.innerHTML = '';
-    }
-
-    create(video) {
-      if (this.dom) return; // Already created
-      const osd = document.querySelector('#videoOsdPage')
-      if (!osd) return;
-
+    init() {
       const style = document.createElement("style");
       style.textContent = `
             #video-overlay {
@@ -61,40 +39,48 @@
               color: white;
               height: 100%;
               width: 100%;
-              padding: 12%;
+              padding-left: 10%;
             }
 
             .header-subtitle {
-              font-size: 1.8rem;
+              font-size: 1.2rem;
               margin-left: 0.4rem;
               font-weight: 400;
               color: rgb(204, 204, 204);
             }
 
             .header {
-              font-size: 5.4rem;
               color: white;
               font-weight: 500;
               margin-top: 0;
               margin-bottom: 0;
+              font-size: 4em;
             }
 
             .season-title {
-              font-size: 2.4rem;
+              font-size: 1.5rem;
               margin: 0.4rem 0 0;
               color: white;
               font-weight: 500;
             }
 
             .episode-title {
-              font-size: 2.4rem;
-              margin: 2.4rem 0 1.2rem;
               color: white;
               font-weight: 500;
             }
 
+            .episode-title[data-has-rating="true"] {
+              display: inline-flex;
+              gap: 2rem;
+            }
+
+            .episode-title .mediaInfoOfficialRating {
+              transform: scale(1.05) !important;
+              margin: auto 0;
+              pointer-events: none;
+            }
+
             .synopsis {
-              font-size: 1.8rem;
               font-weight: 400;
               color: rgb(204, 204, 204);
               width: 60%;
@@ -103,6 +89,41 @@
             `;
 
       document.head.appendChild(style);
+    }
+
+    show() {
+      if (!this.dom) return;
+      log("debug", "Showing overlay")
+      this.dom.style.display = 'block';
+    }
+
+    hide() {
+      if (!this.dom) return;
+      log("debug", "Hiding overlay")
+      this.dom.style.display = 'none';
+    }
+
+    clear() {
+      if (!this.content) return;
+      log("debug", "Clearing")
+      this.hide();
+      this.content.innerHTML = '';
+    }
+
+    destroy() {
+      this.dom?.remove();
+    }
+
+    create(video) {
+      if (this.dom) {
+        log("debug", "Overlay already exists");
+        return; // Already created
+      }
+      const osd = document.querySelector('#videoOsdPage')
+      if (!osd) {
+        log("warn", "OSD container not found, cannot create overlay");
+        return;
+      }
 
       // Create overlay structure
       this.dom = document.createElement("div");
@@ -130,31 +151,40 @@
 
     apply(item) {
       this.clear();
-      this.block = false;
+
+      if (!item) {
+        log("warn", "No item data provided, blocking overlay.");
+        return;
+      }
 
       if (!this.content) this.create();
 
-      log("debug", "[PauseOverlay] Displaying info for item:", item);
+      log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
-      if (item.Type === "Episode") {
-        // Header
-        this.content.innerHTML += `<span class="header-subtitle">You're watching</span>`
-        this.content.innerHTML += `<h2 class="header">${item.SeriesName}</h2>`
-        this.content.innerHTML += `<h4 class="season-title">${item.SeasonName}</h4>`
+      switch (item.Type) {
+        case "Episode":
+          // Header
+          this.content.innerHTML = `<span class="header-subtitle">You're watching</span>`
+          this.content.innerHTML += `<h2 class="header">${item.SeriesName}</h2>`
+          this.content.innerHTML += `<h4 class="season-title">${item.SeasonName}</h4>`
 
-        // Main content
-        this.content.innerHTML += `<h3 class="episode-title">${item.Name} (Ep. ${item.IndexNumber})</h3>`;
-        this.content.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
-      } else if (item.Type === "Movie") {
-        this.content.innerHTML += `<span class="header-subtitle">You're watching</span>`
-        this.content.innerHTML += `<h2 class="header">${item.Name}</h2>`
+          // Main content
+          this.content.innerHTML += `<h3 class="episode-title">${item.Name} (Ep. ${item.IndexNumber})</h3>`;
+          this.content.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+          break;
 
-        // Main content
-        this.content.innerHTML += `<h3 class="episode-title">${item.ProductionYear || ""} <span class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</span> ${this.formatTime(item.RunTimeTicks) || ""}</h3>`;
-        this.content.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
-      } else {
-        this.block = true;
-        console.warn("[PauseOverlay] Unsupported item type:", item.Type);
+        case "Movie":
+          // Header
+          this.content.innerHTML = `<span class="header-subtitle">You're watching</span>`
+          this.content.innerHTML += `<h2 class="header">${item.Name}</h2>`
+
+          // Main content
+          this.content.innerHTML += `<h3 class="episode-title" data-has-rating="true">${item.ProductionYear || ""} <p class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</p> ${this.formatTime(item.RunTimeTicks) || ""}</h3>`;
+          this.content.innerHTML += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+          break;
+
+        default:
+          this.clear();
       }
     }
 
@@ -235,32 +265,38 @@
     checkForVideoChanges() {
       const video = document.querySelector(".videoPlayerContainer video");
       if (video && video !== this.currentVideo) {
-        this.overlay.create(video);
         this.handleVideoChange(video);
       } else if (!video && this.currentVideo) {
         this.clearState();
-        this.overlay.dom?.remove();
       }
     }
 
     async handleVideoChange(video) {
       this.clearState();
       this.currentVideo = video;
-      this.cleanupListeners = this.attachVideoListeners(video);
-      const itemId = this.getItemId();
-      log("debug", "Detected video change, item ID:", itemId);
-      if (itemId) {
-        this.overlay.block = false;
-        this.currentItemId = itemId;
-        const item = this.fetchItemInfo(itemId);
-        this.overlay.apply(item);
-      } else {
-        this.overlay.block = true;
-        log("warn", "Item ID not found, overlay disabled for this video.");
-      }
+
+      // Create the initial listeners and overlay
+      this.cleanupListeners = this.setupOverlay(video);
+      await this.setOverlay(false);
     }
 
-    attachVideoListeners(video) {
+    async setOverlay(show = false) {
+      const id = this.getItemId();
+
+      if (!id) log("warn", "Item ID not found, cannot update overlay.");
+
+      if (id && id !== this.currentItemId) {
+        this.currentItemId = id;
+        const item = await this.fetchItemInfo(id)
+        this.overlay.apply(item);
+      }
+      if (show) this.overlay.show();
+
+    }
+
+    setupOverlay(video) {
+      this.overlay.create(video);
+
       const handleMove = () => {
         // this.lastMouseMove = Date.now();
         // this.overlay.hide();
@@ -275,14 +311,7 @@
 
       const handlePause = async () => {
         if (video === this.currentVideo && !video.ended) {
-          const newItemId = this.getItemId();
-          if (newItemId && newItemId !== this.currentItemId) {
-            this.currentItemId = newItemId;
-            const item = await this.fetchItemInfo(newItemId)
-            this.overlay.apply(item);
-          } else {
-            this.overlay.show();
-          }
+          await this.setOverlay(true);
         }
 
         video.addEventListener("mousemove", handleMove)
@@ -304,6 +333,7 @@
       return () => {
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("play", handlePlay);
+        this.overlay.destroy();
       };
     }
 
@@ -337,16 +367,15 @@
 
     /** 
      * Fetch item info from Jellyfin API 
-     * @param {string} itemId - The ID of the Jellyfin item.
+     * @param {string} id - The ID of the Jellyfin item.
      */
-    async fetchItemInfo(itemId) {
+    async fetchItemInfo(id) {
       try {
-        const item = await this.fetchWithRetry(`${window.location.origin}/Items/${itemId}`, {
+        const item = await this.fetchWithRetry(`${window.location.origin}/Items/${id}`, {
           headers: { "X-Emby-Token": this.token }
         });
         return item;
       } catch (error) {
-        this.overlay.block = true;
         log("error", "Error fetching item info:", error);
       }
     }
@@ -387,10 +416,6 @@
       if (this.observer) {
         this.observer.disconnect();
         this.observer = null;
-      }
-
-      if (this.overlay.dom?.parentNode) {
-        this.overlay.dom.parentNode.removeChild(this.overlay.dom);
       }
     }
   }
