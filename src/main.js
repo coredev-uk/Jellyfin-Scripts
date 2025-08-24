@@ -173,7 +173,7 @@
         return;
       }
 
-      if (!this.content) this.create();
+      if (!this.content || !this.dom) this.create();
 
       log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
@@ -296,23 +296,11 @@
       this.clearState();
       this.currentVideo = video;
 
+      // Create the overlay for the video
+      this.overlay.create(video);
+
       // Create the initial listeners and overlay
       this.cleanupListeners = this.setupOverlay(video);
-      await this.setOverlay(false);
-    }
-
-    async setOverlay(show = false) {
-      const id = this.getItemId();
-
-      if (!id) log("warn", "Item ID not found, cannot update overlay.");
-
-      if (id && id !== this.currentItemId) {
-        this.currentItemId = id;
-        const item = await this.fetchItemInfo(id)
-        this.overlay.apply(item);
-      }
-      if (show) this.overlay.show();
-
     }
 
     setupOverlay(video) {
@@ -326,7 +314,7 @@
           log("debug", "Mouse inactive, showing overlay if paused");
           const now = Date.now();
           if (now - this.lastMouseMove >= this.timeoutDuration && this.currentVideo?.paused) {
-            await this.setOverlay(true);
+            await this.setOverlay();
           }
         }, 10000);
       }
@@ -355,6 +343,19 @@
         document.removeEventListener("touchmove", handleMove);
         this.overlay.destroy();
       };
+    }
+
+    async setOverlay() {
+      const id = this.getItemId();
+
+      if (!id) log("warn", "Item ID not found, cannot update overlay.");
+
+      if (id && id !== this.currentItemId) {
+        this.currentItemId = id;
+        const item = await this.fetchItemInfo(id)
+        this.overlay.apply(item);
+      }
+      this.overlay.show();
     }
 
 
