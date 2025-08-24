@@ -1,5 +1,5 @@
 /*
- * Jellyfin Pause Screen script by BobHasNoSoul modified by n00bcodr
+ * Jellyfin Pause Overlay script by BobHasNoSoul modified by n00bcodr
  * Modified (again) to match Netflix style by Core
  * Source: https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js
  * Original: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen
@@ -92,15 +92,17 @@
     }
 
     show() {
-      if (!this.dom) return;
+      if (!this.dom || this.isShowing) return;
       log("debug", "Showing overlay")
       this.dom.style.display = 'block';
+      this.isShowing = true;
     }
 
     hide() {
-      if (!this.dom) return;
+      if (!this.dom || !this.isShowing) return;
       log("debug", "Hiding overlay")
       this.dom.style.display = 'none';
+      this.isShowing = false;
     }
 
     clear() {
@@ -119,9 +121,9 @@
         log("debug", "Overlay already exists");
         return; // Already created
       }
-      const osd = document.querySelector('#videoOsdPage')
-      if (!osd) {
-        log("warn", "OSD container not found, cannot create overlay");
+      const container = document.querySelector('.videoPlayerContainer')
+      if (!container) {
+        log("error", "Video container not found, cannot create overlay.");
         return;
       }
 
@@ -133,7 +135,7 @@
       this.content.classList.add("overlay-content")
       this.dom.appendChild(this.content);
 
-      osd.appendChild(this.dom);
+      container.appendChild(this.dom);
 
       const clickHandler = (event) => {
         if (event.target === this.dom || event.target === this.content) {
@@ -200,7 +202,7 @@
 
   }
 
-  class JellyfinPauseOverlay {
+  class OverlayController {
     constructor() {
       // Video and item tracking
       this.currentItemId = null;
@@ -218,6 +220,11 @@
       // DOM elements
       this.currentVideo = null;
       this.overlay = new Overlay();
+
+      // Timers
+      this.mouseMoveTimeout = null;
+      this.lastMouseMove = 0;
+      this.timeoutDuration = 10 * 1000 // 10 Seconds
 
       this.init();
     }
@@ -298,33 +305,30 @@
       this.overlay.create(video);
 
       const handleMove = () => {
-        // this.lastMouseMove = Date.now();
-        // this.overlay.hide();
-        // clearTimeout(this.mouseMoveTimeout);
-        // this.mouseMoveTimeout = setTimeout(() => {
-        //   const now = Date.now();
-        //   if (now - this.lastMouseMove >= 10000 && this.currentVideo?.paused) {
-        //     this.overlay.show()
-        //   }
-        // }, 10000);
+        this.lastMouseMove = Date.now();
+        this.overlay.hide();
+        clearTimeout(this.mouseMoveTimeout);
+        this.mouseMoveTimeout = setTimeout(async () => {
+          log("debug", "Mouse inactive, showing overlay if paused");
+          const now = Date.now();
+          if (now - this.lastMouseMove >= this.timeoutDuration && this.currentVideo?.paused) {
+            await this.setOverlay(true);
+          }
+        }, 10000);
       }
 
       const handlePause = async () => {
-        if (video === this.currentVideo && !video.ended) {
-          await this.setOverlay(true);
-        }
-
-        video.addEventListener("mousemove", handleMove)
-        video.addEventListener("touchmove", handleMove)
+        if (video !== this.currentVideo || video.ended) return;
+        log("debug", "Video paused, creating listeners");
+        document.addEventListener("mousemove", handleMove)
+        document.addEventListener("touchmove", handleMove)
       };
 
       const handlePlay = () => {
-        if (video === this.currentVideo) {
-          this.overlay.hide();
-        }
-
-        video.removeEventListener("mousemove", handleMove)
-        video.removeEventListener("touchmove", handleMove)
+        if (video !== this.currentVideo) return;
+        this.overlay.hide();
+        document.removeEventListener("mousemove", handleMove)
+        document.removeEventListener("touchmove", handleMove)
       };
 
       video.addEventListener("pause", handlePause)
@@ -333,6 +337,8 @@
       return () => {
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("play", handlePlay);
+        document.removeEventListener("mousemove", handleMove);
+        document.removeEventListener("touchmove", handleMove);
         this.overlay.destroy();
       };
     }
@@ -421,5 +427,5 @@
   }
 
   // Initialize the pause screen
-  new JellyfinPauseOverlay();
+  new OverlayController();
 })();
