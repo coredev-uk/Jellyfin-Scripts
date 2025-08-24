@@ -29,7 +29,19 @@
                 width: 100%;
                 background: rgba(0, 0, 0, .5);
                 position: absolute;
-                display: none;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.5s ease, visibility 0.5s ease;
+            }
+
+            #video-overlay.show {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            #video-overlay.hide {
+                opacity: 0;
+                visibility: hidden;
             }
 
             .overlay-content {
@@ -94,14 +106,16 @@
     show() {
       if (!this.dom || this.isShowing) return;
       log("debug", "Showing overlay")
-      this.dom.style.display = 'block';
+      this.dom.classList.add('show');
+      this.dom.classList.remove('hide');
       this.isShowing = true;
     }
 
     hide() {
       if (!this.dom || !this.isShowing) return;
       log("debug", "Hiding overlay")
-      this.dom.style.display = 'none';
+      this.dom.classList.add('hide');
+      this.dom.classList.remove('show');
       this.isShowing = false;
     }
 
