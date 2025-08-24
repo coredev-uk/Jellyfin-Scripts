@@ -173,7 +173,10 @@
         return;
       }
 
-      if (!this.content || !this.dom) this.create();
+      if (!this.content || !this.dom) {
+        log("error", "Overlay not initialized properly.");
+        return;
+      }
 
       log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
@@ -304,8 +307,6 @@
     }
 
     setupOverlay(video) {
-      this.overlay.create(video);
-
       const handleMove = () => {
         this.lastMouseMove = Date.now();
         this.overlay.hide();
