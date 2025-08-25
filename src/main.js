@@ -352,9 +352,9 @@
       if (!id) log("warn", "Item ID not found, cannot update overlay.");
 
       if (id && id !== this.currentItemId) {
-        this.currentItemId = id;
         const item = await this.fetchItemInfo(id)
         this.overlay.apply(item);
+        this.currentItemId = id;
       }
       this.overlay.show();
     }
