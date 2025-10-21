@@ -1,10 +1,9 @@
 /**
  * Title: Jellyfin Rating Attribute Setter
- * Version: 2.0
+ * Version: v2.0
  * Original Source: https://github.com/n00bcodr/Jellyfish/blob/main/scripts/rating.js
  * Author: Original: n00bcodr / Improved: Core
- * Description: Dynamically applies the media rating (e.g., 'TV-MA', 'R') as a custom HTML attribute named 'rating'
- * to media elements for easy CSS styling/theming. Ignores elements processed by the Media Bar Patcher.
+ * Description: Dynamically applies the media rating (e.g., 'TV-MA', 'R') as a custom HTML attribute named 'rating' to media elements for easy CSS styling/theming. Ignores elements processed by the Media Bar Patcher.
  */
 
 (function () {
