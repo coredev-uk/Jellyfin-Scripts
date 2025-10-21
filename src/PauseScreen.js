@@ -257,6 +257,10 @@
       this.lastMouseMove = 0;
       this.timeoutDuration = 10 * 1000; // 10 Seconds
 
+      this.videoInitialized = false;
+      this.initialPauseTimeout = null; // New timeout reference
+      this.initialDebounceTime = 1000; // 1 second debounce
+
       this.init();
     }
 
@@ -318,12 +322,17 @@
     }
 
     handleVideoChange(video) {
-      this.clearState(); // Clean up old listeners/state
+      this.clearState();
       this.currentVideo = video;
+      this.videoInitialized = false; // Reset flag for the new video
 
-      this.overlay.create(video); // Create/update overlay element
+      // NEW: Clear the flag after a debounce period
+      this.initialPauseTimeout = setTimeout(() => {
+        this.videoInitialized = true;
+        log("debug", "Video initialization debounce complete.");
+      }, this.initialDebounceTime); // Allow 1 second for initial events to pass
 
-      // Setup new event listeners and get cleanup function
+      this.overlay.create(video);
       this.cleanupListeners = this.setupOverlayListeners(video);
     }
 
@@ -349,6 +358,13 @@
 
       const handlePause = async () => {
         if (video !== this.currentVideo || video.ended) return;
+
+        // Block if the video hasn't finished its initial load debounce
+        if (!this.videoInitialized) {
+          log("debug", "Ignored pause event during video initialization debounce.");
+          return;
+        }
+
         log("debug", "Video paused event detected.");
 
         // Attach move listeners only on pause
@@ -387,6 +403,7 @@
         document.removeEventListener("mousemove", handleMove);
         document.removeEventListener("touchmove", handleMove);
         clearTimeout(this.mouseMoveTimeout);
+        clearTimeout(this.initialPauseTimeout);
         this.overlay.destroy();
       };
     }
