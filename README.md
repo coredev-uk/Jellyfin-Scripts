@@ -2,6 +2,8 @@
 
 JavaScript enhancement scripts for Jellyfin media server. Use with the [Jellyfin JavaScript Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector).
 
+> **Note:** This is a personal scripts repository. These scripts are free to use but no support is given. Scripts have been modified for personal preferences and may differ from the originals.
+
 ## Scripts
 
 - [`LoginImage.js`](src/LoginImage.js) - Original: [n00bcodr/Jellyfish](https://github.com/n00bcodr/Jellyfish/blob/main/scripts/loginimage.js)
