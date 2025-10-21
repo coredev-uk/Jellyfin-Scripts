@@ -1,9 +1,8 @@
-/**
+/*
  * Title: Netflix-Style Pause Overlay
- * Version: v2.1
+ * Version: v2.2
  * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js 
- * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core
- * Description: Displays a Netflix-style overlay on video pause, showing rich media metadata (title, season, synopsis) and hides after mouse inactivity.
+ * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core 
  */
 
 (function () {
@@ -31,12 +30,11 @@
       this.isShowing = false;
       this.dom = null;
       this.content = null;
-      this.videoElement = null; // Store video element for unpausing
+      this.videoElement = null;
       this.init();
     }
 
     init() {
-      // CSS is now inside the class constructor, ensuring it's injected exactly once.
       const style = document.createElement("style");
       style.textContent = `
                 #${Overlay.DOM_ID} {
@@ -47,14 +45,13 @@
                     opacity: 0;
                     visibility: hidden;
                     transition: opacity 0.5s ease, visibility 0.5s ease;
-                    z-index: 9999; /* Ensure overlay is above Jellyfin controls */
+                    z-index: 9999;
                 }
 
                 #${Overlay.DOM_ID}.show {
                     opacity: 1;
                     visibility: visible;
                 }
-                /* CSS for overlay content remains unchanged */
                 .${Overlay.CONTENT_CLASS} {
                   display: flex;
                   flex-direction: column;
@@ -140,7 +137,7 @@
     create(video) {
       if (this.dom) {
         log("debug", "Overlay already exists");
-        this.videoElement = video; // Update reference
+        this.videoElement = video;
         return;
       }
       const container = document.querySelector('.videoPlayerContainer');
@@ -149,7 +146,6 @@
         return;
       }
 
-      // Create overlay structure
       this.dom = document.createElement("div");
       this.dom.id = Overlay.DOM_ID;
 
@@ -158,14 +154,11 @@
       this.dom.appendChild(this.content);
       this.videoElement = video;
 
-      // Ensure overlay is appended to the video container
       container.appendChild(this.dom);
 
       const clickHandler = (event) => {
-        // Check if the click was directly on the overlay or content, not on hidden video controls
         if (event.target === this.dom || event.target === this.content) {
           this.hide();
-          // Use optional chaining for safer access
           if (this.videoElement?.paused) {
             this.videoElement.play();
           }
@@ -177,7 +170,7 @@
     }
 
     apply(item) {
-      if (!item?.Type) { // Use optional chaining for safer item check
+      if (!item?.Type) {
         log("warn", "No valid item data provided, blocking overlay.");
         return;
       }
@@ -189,29 +182,23 @@
 
       log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
-      // Use temporary variables for cleaner string building
       let htmlContent = '';
       let subtitle = `<span class="header-subtitle">You're watching</span>`;
 
       switch (item.Type) {
         case "Episode":
-          // Header
           htmlContent += subtitle;
           htmlContent += `<h2 class="header">${item.SeriesName || 'Unknown Series'}</h2>`;
           htmlContent += `<h4 class="season-title">${item.SeasonName || 'Unknown Season'}</h4>`;
 
-          // Main content
           htmlContent += `<h3 class="episode-title">${item.Name || 'Unknown Episode'} (Ep. ${item.IndexNumber || '?'})</h3>`;
           htmlContent += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
           break;
 
         case "Movie":
-          // Header
           htmlContent += subtitle;
           htmlContent += `<h2 class="header">${item.Name || 'Unknown Movie'}</h2>`;
 
-          // Main content - Use the custom attribute 'rating' as intended by your CSS
-          // The Movie type has OfficialRating directly available.
           const ratingHtml = item.OfficialRating ? `<p class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</p>` : '';
           const runTime = this.formatTime(item.RunTimeTicks);
 
@@ -221,7 +208,7 @@
 
         default:
           log("warn", `Unmapped item type: ${item.Type}.`);
-          return; // Return early if type is unhandled
+          return;
       }
 
       this.content.innerHTML = htmlContent;
@@ -230,8 +217,7 @@
     formatTime(runTimeTicks) {
       if (!runTimeTicks) return "";
 
-      // Use standard Math.round for better performance than Math.floor where possible
-      const totalMinutes = Math.round(runTimeTicks / 600000000); // 60M ticks/second * 60 seconds/minute * 10 = 600M
+      const totalMinutes = Math.round(runTimeTicks / 600000000);
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
 
@@ -242,12 +228,12 @@
   // --- Controller Class: Handles State, Events, and API ---
 
   class OverlayController {
-    static debug = true; // Central debug control: Set to false to disable all logs
+    static debug = false; // Central debug control: Set to false to disable all logs
     static RETRY_COUNT = 3;
 
     constructor() {
       this.currentItemId = null;
-      this.credentials = null; // Store credentials object
+      this.credentials = null;
       this.cleanupListeners = null;
       this.observer = null;
       this.currentVideo = null;
@@ -257,8 +243,8 @@
       this.timeoutDuration = 10 * 1000; // 10 Seconds
 
       this.videoInitialized = false;
-      this.initialPauseTimeout = null; // New timeout reference
-      this.initialDebounceTime = 1000; // 1 second debounce
+      this.initialPauseTimeout = null;
+      this.initialDebounceTime = 1000;
 
       this.init();
     }
@@ -273,16 +259,12 @@
       log("info", "Initialised successfully.");
     }
 
-    /**
-     * Enhanced credential retrieval: cleaner and more defensive.
-     */
     getCredentials() {
       try {
         const creds = localStorage.getItem("jellyfin_credentials");
         if (!creds) return null;
 
         const parsed = JSON.parse(creds);
-        // Use Array.find to safely get the active/first server
         const server = parsed.Servers?.find(s => s.AccessToken) || parsed.Servers?.[0];
 
         if (server?.AccessToken && server?.UserId) {
@@ -295,7 +277,6 @@
     }
 
     setupVideoObserver() {
-      // Observe the body for video player container changes (entering/exiting video playback)
       this.observer = new MutationObserver(() => {
         this.checkForVideoChanges();
       });
@@ -309,13 +290,10 @@
     }
 
     checkForVideoChanges() {
-      // Target the video element directly
       const video = document.querySelector(".videoPlayerContainer video");
       if (video && video !== this.currentVideo) {
-        // New video started
         this.handleVideoChange(video);
       } else if (!video && this.currentVideo) {
-        // Video ended or player closed
         this.clearState();
       }
     }
@@ -323,62 +301,49 @@
     handleVideoChange(video) {
       this.clearState();
       this.currentVideo = video;
-      this.videoInitialized = false; // Reset flag for the new video
+      this.videoInitialized = false;
 
-      // NEW: Clear the flag after a debounce period
       this.initialPauseTimeout = setTimeout(() => {
         this.videoInitialized = true;
         log("debug", "Video initialization debounce complete.");
-      }, this.initialDebounceTime); // Allow 1 second for initial events to pass
+      }, this.initialDebounceTime);
 
       this.overlay.create(video);
       this.cleanupListeners = this.setupOverlayListeners(video);
     }
 
-    /**
-     * Sets up pause/play and mouse move event listeners.
-     */
     setupOverlayListeners(video) {
       const handleMove = () => {
         this.lastMouseMove = Date.now();
         this.overlay.hide();
         clearTimeout(this.mouseMoveTimeout);
 
-        // Re-arm timeout
         this.mouseMoveTimeout = setTimeout(async () => {
           log("debug", "Mouse inactive timeout reached.");
           const now = Date.now();
-          // Check if mouse is still inactive AND video is paused
           if ((now - this.lastMouseMove) >= this.timeoutDuration && this.currentVideo?.paused) {
             await this.setOverlay();
           }
-        }, this.timeoutDuration); // Use the full timeout duration here
+        }, this.timeoutDuration);
       }
 
       const handlePause = async () => {
         if (video !== this.currentVideo || video.ended) return;
 
-        // Block if the video hasn't finished its initial load debounce
         if (!this.videoInitialized) {
           log("debug", "Ignored pause event during video initialization debounce.");
           return;
         }
 
-        log("debug", "Video paused event detected.");
+        log("debug", "Video paused event detected. Starting 10-second inactivity countdown.");
 
-        // Attach move listeners only on pause
+        this.lastMouseMove = Date.now();
+
         document.addEventListener("mousemove", handleMove);
         document.addEventListener("touchmove", handleMove);
 
-        // Immediately check if mouse is already inactive (e.g., if paused via keyboard)
-        const now = Date.now();
-        if ((now - this.lastMouseMove) >= this.timeoutDuration) {
-          // If mouse has been inactive long enough, show overlay immediately
-          await this.setOverlay();
-        } else {
-          // Otherwise, start the timeout check
-          handleMove();
-        }
+        // Always start the countdown via handleMove() when paused.
+        handleMove();
       };
 
       const handlePlay = () => {
@@ -386,7 +351,6 @@
         log("debug", "Video playing event detected. Hiding overlay.");
         this.overlay.hide();
 
-        // Remove move listeners and stop timeout on play
         document.removeEventListener("mousemove", handleMove);
         document.removeEventListener("touchmove", handleMove);
         clearTimeout(this.mouseMoveTimeout);
@@ -395,7 +359,6 @@
       video.addEventListener("pause", handlePause);
       video.addEventListener("play", handlePlay);
 
-      // Return a function to clean up all added listeners
       return () => {
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("play", handlePlay);
@@ -423,25 +386,19 @@
       this.overlay.show();
     }
 
-    /**
-     * Attempts to extract the current item's ID from the DOM.
-     */
     getItemId(force = true) {
-      // Rate limit ID checks to prevent excessive DOM querying
       if (!force && (Date.now() - this.lastItemIdCheck) < 500) {
         return this.currentItemId;
       }
       this.lastItemIdCheck = Date.now();
 
-      // Prioritize reliable elements often visible in the player OSD (e.g., rating button, settings button)
-      const ratingButton = document.querySelector('.btnUserRating'); // Most reliable selector
+      const ratingButton = document.querySelector('.btnUserRating');
       const dataId = ratingButton?.getAttribute('data-id');
 
       if (dataId) {
         return dataId;
       }
 
-      // Fallback to searching the main video container for data-itemid (less reliable, but a good check)
       const videoOsd = document.querySelector('.videoOsdBottom-hidden');
       const osdItemId = videoOsd?.querySelector('[data-itemid]')?.getAttribute('data-itemid');
 
@@ -452,23 +409,17 @@
       return null;
     }
 
-    /**
-     * Fetch item info from Jellyfin API with simplified access to credentials.
-     */
     async fetchItemInfo(id) {
       try {
         const item = await this.fetchWithRetry(`${window.location.origin}/Items/${id}`, {
           headers: { "X-Emby-Token": this.credentials.token }
-        }, OverlayController.RETRY_COUNT); // Use static retry count
+        }, OverlayController.RETRY_COUNT);
         return item;
       } catch (error) {
         log("error", "Error fetching item info:", error);
       }
     }
 
-    /**
-     * Fetch helper with clear async/await retry logic.
-     */
     async fetchWithRetry(url, options, maxRetries) {
       for (let i = 0; i < maxRetries; i++) {
         try {
@@ -479,7 +430,6 @@
           return await response.json();
         } catch (error) {
           if (i === maxRetries - 1) throw error;
-          // Exponential backoff delay
           await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
         }
       }
@@ -490,13 +440,14 @@
       this.overlay.clear();
 
       if (this.cleanupListeners) {
-        this.cleanupListeners(); // Calls the function returned by setupOverlayListeners
+        this.cleanupListeners();
         this.cleanupListeners = null;
       }
 
       this.currentItemId = null;
       this.currentVideo = null;
       clearTimeout(this.mouseMoveTimeout);
+      clearTimeout(this.initialPauseTimeout);
     }
 
     destroy() {
