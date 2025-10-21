@@ -166,9 +166,7 @@
     }
 
     apply(item) {
-      this.clear();
-
-      if (!item) {
+      if (!item || !item.Type) {
         log("warn", "No item data provided, blocking overlay.");
         return;
       }
@@ -203,7 +201,7 @@
           break;
 
         default:
-          this.clear();
+          log("error", `Unmapped type ${item.Type}.`)
       }
     }
 
