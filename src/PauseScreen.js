@@ -1,6 +1,6 @@
 /*
  * Title: Netflix-Style Pause Overlay
- * Version: v2.0
+ * Version: v2.1
  * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js 
  * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core
  * Description: Displays a Netflix-style overlay on video pause, showing rich media metadata (title, season, synopsis) and hides after mouse inactivity.
