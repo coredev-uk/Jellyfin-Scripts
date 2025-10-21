@@ -1,4 +1,4 @@
-/*
+/**
  * Title: Netflix-Style Pause Overlay
  * Version: v2.1
  * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js 
@@ -10,7 +10,6 @@
   'use strict';
 
   // --- Logging Utility ---
-  // Note: Logging is essential for debugging dynamic player scripts.
   function log(type, msg, errorDetails = null) {
     if (type === 'debug' && !OverlayController.debug) return;
 
@@ -426,7 +425,6 @@
 
     /**
      * Attempts to extract the current item's ID from the DOM.
-     * Optimization: Target reliable data attributes instead of brittle nth-child selectors.
      */
     getItemId(force = true) {
       // Rate limit ID checks to prevent excessive DOM querying
@@ -454,7 +452,8 @@
       return null;
     }
 
-    /** * Fetch item info from Jellyfin API with simplified access to credentials.
+    /**
+     * Fetch item info from Jellyfin API with simplified access to credentials.
      */
     async fetchItemInfo(id) {
       try {

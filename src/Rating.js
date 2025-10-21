@@ -202,7 +202,7 @@
   }).observe(document.head, { subtree: true, childList: true, characterData: true });
 
 
-  // Handle page visibility changes (Optimizes resource use when tab is backgrounded)
+  // Handle page visibility changes 
   if (typeof document.visibilityState !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
