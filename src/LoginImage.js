@@ -161,8 +161,6 @@
     }
   };
 
-  // --- Master Observer Logic (The Fix) ---
-
   const initializedElements = new WeakSet();
 
   const masterObserver = new MutationObserver((_mutations, _observer) => {

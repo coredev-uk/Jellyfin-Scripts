@@ -3,7 +3,7 @@
  * Version: v2.0
  * Original Source: https://github.com/n00bcodr/Jellyfish/blob/main/scripts/rating.js
  * Author: Original: n00bcodr / Improved: Core
- * Description: Dynamically applies the media rating (e.g., 'TV-MA', 'R') as a custom HTML attribute named 'rating' to media elements for easy CSS styling/theming. Ignores elements processed by the Media Bar Patcher.
+ * Description: Dynamically applies the media rating (e.g., 'TV-MA', 'R') as a custom HTML attribute named 'rating' to media elements for easy CSS styling/theming. 
  */
 
 (function () {
@@ -25,12 +25,8 @@
   // -------------------------------
 
   const CONFIG = {
-    // --- CRITICAL CHANGE: ATTRIBUTE NAME IS NOW 'rating' ---
     attributeName: 'rating',
-    // --------------------------------------------------------
-
-    // This selector ensures the script ignores elements handled by the Media Bar Patcher.
-    targetSelector: '.mediaInfoOfficialRating:not(.age-rating *)',
+    targetSelector: '.mediaInfoOfficialRating',
     fallbackInterval: 1500,
     debounceDelay: 150,
   };
@@ -42,8 +38,6 @@
   let processedElements = new WeakSet();
 
   log("Script loaded.");
-
-  // --- Core Utility Functions ---
 
   function normalizeRating(rating) {
     if (!rating) return '';
@@ -78,12 +72,10 @@
             return;
           }
 
-          // APPLYING THE REQUIRED 'rating' ATTRIBUTE
           element.setAttribute(CONFIG.attributeName, normalizedRating);
           processedElements.add(element);
           processedCount++;
 
-          // Note: Aria-label and title remain standard for accessibility/tooltips
           if (!element.getAttribute('aria-label')) {
             element.setAttribute('aria-label', `Content rated ${normalizedRating}`);
           }
