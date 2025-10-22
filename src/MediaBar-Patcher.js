@@ -170,7 +170,7 @@
               const value = parseInt(ratingText);
               const criticClass = (value >= 60) ? 'mediaInfoCriticRatingFresh' : 'mediaInfoCriticRatingRotten';
 
-              const newHtml = `<div class="mediaInfoItem mediaInfoCriticRating ${criticClass}">${ratingText}</div>`;
+              const newHtml = `<div class="mediaInfoItem mediaInfoCriticRating ${criticClass}" style="margin: none !important;">${ratingText}</div>`;
               const newElement = this._createStyledRatingElement(newHtml);
 
               tomatoRatingDiv.replaceWith(newElement);
