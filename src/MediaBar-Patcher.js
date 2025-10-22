@@ -138,7 +138,7 @@
 
             if (ratingSpan && ratingText) {
 
-              const newHtml = `<div class="starRatingContainer mediaInfoItem"><span class="material-icons starIcon star" aria-hidden="true"></span>${ratingText}</div>`;
+              const newHtml = `<div class="starRatingContainer mediaInfoItem"><span class="material-icons starIcon star" style="font-family: 'Material Symbols Rounded' !important;" aria-hidden="true"></span>${ratingText}</div>`;
               const newElement = this._createStyledRatingElement(newHtml);
 
               imdbLogoDiv.replaceWith(newElement);

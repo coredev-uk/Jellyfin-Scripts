@@ -1,0 +1,61 @@
+.starIcon {
+  color: #f2b01e;
+  font-size: 1.4em;
+  height: auto !important;
+  margin-right: .125em;
+  width: auto !important;
+}
+
+.material-icons {
+  font-family: 'Material Symbols Rounded';
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+[dir="ltr"] .mediaInfoCriticRating {
+  background-position: 0;
+  padding-left: 1.5em;
+}
+
+[dir="ltr"] .mediaInfoItem {
+  margin: 0 1em 0 0;
+}
+
+.mediaInfoCriticRatingFresh {
+  background-image: url(assets/img/fresh.svg);
+}
+
+.mediaInfoCriticRatingRotten {
+  background-image: url(assets/img/rotten.svg);
+}
+
+.mediaInfoCriticRating {
+  -webkit-align-items: center;
+  align-items: center;
+  background-repeat: no-repeat;
+  background-size: auto 1.2em;
+  /* display: -webkit-flex; */
+  display: flex;
+  min-height: 1.2em;
+}
+
+.mediaInfoItem {
+  padding: 0;
+}
+
+.starRatingContainer {
+  -webkit-align-items: center;
+  align-items: center;
+  /* display: -webkit-flex; */
+  display: flex;
+  -webkit-justify-content: center;
+  justify-content: center;
+  vertical-align: middle;
+}
