@@ -7,7 +7,6 @@ JavaScript enhancement scripts for Jellyfin media server. Use with the [Jellyfin
 ## Scripts
 
 - [`LoginImage.js`](src/LoginImage.js) - Original: [n00bcodr/Jellyfish](https://github.com/n00bcodr/Jellyfish/blob/main/scripts/loginimage.js)
-- [`MediaBar-Patcher.js`](src/MediaBar-Patcher.js) - Author: Core
 - [`PauseScreen.js`](src/PauseScreen.js) - Original: [BobHasNoSoul/Jellyfin-PauseScreen](https://github.com/BobHasNoSoul/Jellyfin-PauseScreen)
 - [`Rating.js`](src/Rating.js) - Original: [n00bcodr/Jellyfish](https://github.com/n00bcodr/Jellyfish/blob/main/scripts/rating.js)
 
