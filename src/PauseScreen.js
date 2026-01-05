@@ -1,6 +1,6 @@
 /*
  * Title: Netflix-Style Pause Overlay
- * Version: v2.2
+ * Version: v2.3
  * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js
  * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core
  */
@@ -34,69 +34,77 @@
     init() {
       const style = document.createElement("style");
       style.textContent = `
-                #${Overlay.DOM_ID} {
-                    height: 100%;
-                    width: 100%;
-                    background: rgba(0, 0, 0, .5);
-                    position: absolute;
-                    opacity: 0;
-                    visibility: hidden;
-                    transition: opacity 0.5s ease, visibility 0.5s ease;
-                    z-index: 9999;
-                }
+        #${Overlay.DOM_ID} {
+            height: 100%;
+            width: 100%;
+            background: rgba(0, 0, 0, .5);
+            position: absolute;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+            z-index: 9999;
+        }
 
-                #${Overlay.DOM_ID}.show {
-                    opacity: 1;
-                    visibility: visible;
-                }
-                .${Overlay.CONTENT_CLASS} {
-                  display: flex;
-                  flex-direction: column;
-                  justify-content: center;
-                  color: white;
-                  height: 100%;
-                  width: 100%;
-                  padding-left: 10%;
-                }
-                .header-subtitle {
-                  font-size: 1.2rem;
-                  margin-left: 0.4rem;
-                  font-weight: 400;
-                  color: rgb(204, 204, 204);
-                }
-                .header {
-                  color: white;
-                  font-weight: 500;
-                  margin-top: 0;
-                  margin-bottom: 0;
-                  font-size: 4em;
-                }
-                .season-title {
-                  font-size: 1.5rem;
-                  margin: 0.4rem 0 0;
-                  color: white;
-                  font-weight: 500;
-                }
-                .episode-title {
-                  color: white;
-                  font-weight: 500;
-                }
-                .episode-title[data-has-rating="true"] {
-                  display: inline-flex;
-                  gap: 2rem;
-                }
-                .episode-title .mediaInfoOfficialRating {
-                  transform: scale(1.05) !important;
-                  margin: auto 0;
-                  pointer-events: none;
-                }
-                .synopsis {
-                  font-weight: 400;
-                  color: rgb(204, 204, 204);
-                  width: 60%;
-                  margin: 0;
-                }
-            `;
+        #${Overlay.DOM_ID}.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .${Overlay.CONTENT_CLASS} {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          color: white;
+          height: 100%;
+          width: 100%;
+          padding-left: 10%;
+        }
+        .header-subtitle {
+          font-size: 1.2rem;
+          margin-left: 0.4rem;
+          font-weight: 400;
+          color: rgb(204, 204, 204);
+        }
+        .header {
+          color: white;
+          font-weight: 500;
+          margin-top: 0;
+          margin-bottom: 0;
+          font-size: 4em;
+        }
+        .season-title {
+          font-size: 1.5rem;
+          margin: 0.4rem 0 0;
+          color: white;
+          font-weight: 500;
+        }
+        .episode-title {
+          color: white;
+          font-weight: 500;
+        }
+        .episode-title[data-has-rating="true"] {
+          display: inline-flex;
+          gap: 2rem;
+        }
+        .episode-title .mediaInfoOfficialRating {
+          transform: scale(1.05) !important;
+          margin: auto 0;
+          pointer-events: none;
+        }
+        .synopsis {
+          font-weight: 400;
+          color: rgb(204, 204, 204);
+          width: 60%;
+          margin: 0;
+        }
+        .status {
+          font-size: 1.2rem;
+          font-weight: 400;
+          color: rgb(204, 204, 204);
+          position: absolute;
+          bottom: 10%;
+          right: 10%;
+        }
+      `;
       document.head.appendChild(style);
     }
 
@@ -180,7 +188,8 @@
       log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
       let htmlContent = "";
-      let subtitle = `<span class="header-subtitle">You're watching</span>`;
+      const subtitle = `<span class="header-subtitle">You're watching</span>`;
+      const status = `<span class="status">Paused</span>`;
 
       switch (item.Type) {
         case "Episode":
@@ -188,8 +197,18 @@
           htmlContent += `<h2 class="header">${item.SeriesName || "Unknown Series"}</h2>`;
           htmlContent += `<h4 class="season-title">${item.SeasonName || "Unknown Season"}</h4>`;
 
-          htmlContent += `<h3 class="episode-title">${item.Name || "Unknown Episode"} (Ep. ${item.IndexNumber || "?"})</h3>`;
+          // Only display episode name if the name already is the episode number
+          if (
+            item.Name.trim() === `Episode ${item.IndexNumber}` ||
+            item.Name.trim() === `Ep. ${item.IndexNumber}`
+          ) {
+            htmlContent += `<h3 class="episode-title">${item.Name || "Unknown Episode"}</h3>`;
+          } else {
+            htmlContent += `<h3 class="episode-title">${item.Name || "Unknown Episode"}: Ep. ${item.IndexNumber || "?"}</h3>`;
+          }
+
           htmlContent += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+          htmlContent += status;
           break;
 
         case "Movie":
@@ -203,6 +222,7 @@
 
           htmlContent += `<h3 class="episode-title" data-has-rating="${!!item.OfficialRating}">${item.ProductionYear || ""} ${ratingHtml} ${runTime}</h3>`;
           htmlContent += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
+          htmlContent += status;
           break;
 
         default:
@@ -477,7 +497,5 @@
   }
 
   // Initialize the overlay controller when the script runs
-  const a = new OverlayController();
-
-  window.show = a.setOverlay;
+  return new OverlayController();
 })();
