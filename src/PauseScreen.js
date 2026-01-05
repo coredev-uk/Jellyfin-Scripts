@@ -1,16 +1,15 @@
 /*
  * Title: Netflix-Style Pause Overlay
  * Version: v2.2
- * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js 
- * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core 
+ * Original Source: https://github.com/BobHasNoSoul/Jellyfin-PauseScreen & https://github.com/n00bcodr/Jellyfish/blob/main/scripts/pausescreen.js
+ * Author: Original: BobHasNoSoul, n00bcodr / Refactored: Core
  */
 
 (function () {
-  'use strict';
+  "use strict";
 
-  // --- Logging Utility ---
   function log(type, msg, errorDetails = null) {
-    if (type === 'debug' && !OverlayController.debug) return;
+    if (type === "debug" && !OverlayController.debug) return;
 
     const prefix = `[PauseOverlay] [${type.toUpperCase()}]`;
     if (errorDetails) {
@@ -19,8 +18,6 @@
       console[type](prefix, msg);
     }
   }
-
-  // --- Overlay Class: Handles the DOM and Styling ---
 
   class Overlay {
     static DOM_ID = "video-overlay";
@@ -106,16 +103,16 @@
     show() {
       if (!this.dom || this.isShowing) return;
       log("debug", "Showing overlay");
-      this.dom.classList.add('show');
-      this.dom.classList.remove('hide');
+      this.dom.classList.add("show");
+      this.dom.classList.remove("hide");
       this.isShowing = true;
     }
 
     hide() {
       if (!this.dom || !this.isShowing) return;
       log("debug", "Hiding overlay");
-      this.dom.classList.add('hide');
-      this.dom.classList.remove('show');
+      this.dom.classList.add("hide");
+      this.dom.classList.remove("show");
       this.isShowing = false;
     }
 
@@ -123,7 +120,7 @@
       if (!this.content) return;
       log("debug", "Clearing content");
       this.hide();
-      this.content.innerHTML = '';
+      this.content.innerHTML = "";
     }
 
     destroy() {
@@ -140,7 +137,7 @@
         this.videoElement = video;
         return;
       }
-      const container = document.querySelector('.videoPlayerContainer');
+      const container = document.querySelector(".videoPlayerContainer");
       if (!container) {
         log("error", "Video container not found, cannot create overlay.");
         return;
@@ -163,10 +160,10 @@
             this.videoElement.play();
           }
         }
-      }
+      };
 
-      this.dom.addEventListener('click', clickHandler);
-      this.dom.addEventListener('touchstart', clickHandler);
+      this.dom.addEventListener("click", clickHandler);
+      this.dom.addEventListener("touchstart", clickHandler);
     }
 
     apply(item) {
@@ -182,24 +179,26 @@
 
       log("debug", `Displaying info for item ${item.Name} (${item.Type})`);
 
-      let htmlContent = '';
+      let htmlContent = "";
       let subtitle = `<span class="header-subtitle">You're watching</span>`;
 
       switch (item.Type) {
         case "Episode":
           htmlContent += subtitle;
-          htmlContent += `<h2 class="header">${item.SeriesName || 'Unknown Series'}</h2>`;
-          htmlContent += `<h4 class="season-title">${item.SeasonName || 'Unknown Season'}</h4>`;
+          htmlContent += `<h2 class="header">${item.SeriesName || "Unknown Series"}</h2>`;
+          htmlContent += `<h4 class="season-title">${item.SeasonName || "Unknown Season"}</h4>`;
 
-          htmlContent += `<h3 class="episode-title">${item.Name || 'Unknown Episode'} (Ep. ${item.IndexNumber || '?'})</h3>`;
+          htmlContent += `<h3 class="episode-title">${item.Name || "Unknown Episode"} (Ep. ${item.IndexNumber || "?"})</h3>`;
           htmlContent += `<p class="synopsis">${item.Overview || "No description available."}</p>`;
           break;
 
         case "Movie":
           htmlContent += subtitle;
-          htmlContent += `<h2 class="header">${item.Name || 'Unknown Movie'}</h2>`;
+          htmlContent += `<h2 class="header">${item.Name || "Unknown Movie"}</h2>`;
 
-          const ratingHtml = item.OfficialRating ? `<p class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</p>` : '';
+          const ratingHtml = item.OfficialRating
+            ? `<p class="mediaInfoOfficialRating" rating="${item.OfficialRating}">${item.OfficialRating}</p>`
+            : "";
           const runTime = this.formatTime(item.RunTimeTicks);
 
           htmlContent += `<h3 class="episode-title" data-has-rating="${!!item.OfficialRating}">${item.ProductionYear || ""} ${ratingHtml} ${runTime}</h3>`;
@@ -265,7 +264,8 @@
         if (!creds) return null;
 
         const parsed = JSON.parse(creds);
-        const server = parsed.Servers?.find(s => s.AccessToken) || parsed.Servers?.[0];
+        const server =
+          parsed.Servers?.find((s) => s.AccessToken) || parsed.Servers?.[0];
 
         if (server?.AccessToken && server?.UserId) {
           return { token: server.AccessToken, userId: server.UserId };
@@ -283,7 +283,7 @@
 
       this.observer.observe(document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
       });
 
       this.checkForVideoChanges();
@@ -321,21 +321,30 @@
         this.mouseMoveTimeout = setTimeout(async () => {
           log("debug", "Mouse inactive timeout reached.");
           const now = Date.now();
-          if ((now - this.lastMouseMove) >= this.timeoutDuration && this.currentVideo?.paused) {
+          if (
+            now - this.lastMouseMove >= this.timeoutDuration &&
+            this.currentVideo?.paused
+          ) {
             await this.setOverlay();
           }
         }, this.timeoutDuration);
-      }
+      };
 
       const handlePause = async () => {
         if (video !== this.currentVideo || video.ended) return;
 
         if (!this.videoInitialized) {
-          log("debug", "Ignored pause event during video initialization debounce.");
+          log(
+            "debug",
+            "Ignored pause event during video initialization debounce.",
+          );
           return;
         }
 
-        log("debug", "Video paused event detected. Starting 10-second inactivity countdown.");
+        log(
+          "debug",
+          "Video paused event detected. Starting 10-second inactivity countdown.",
+        );
 
         this.lastMouseMove = Date.now();
 
@@ -387,20 +396,22 @@
     }
 
     getItemId(force = true) {
-      if (!force && (Date.now() - this.lastItemIdCheck) < 500) {
+      if (!force && Date.now() - this.lastItemIdCheck < 500) {
         return this.currentItemId;
       }
       this.lastItemIdCheck = Date.now();
 
-      const ratingButton = document.querySelector('.btnUserRating');
-      const dataId = ratingButton?.getAttribute('data-id');
+      const ratingButton = document.querySelector(".btnUserRating");
+      const dataId = ratingButton?.getAttribute("data-id");
 
       if (dataId) {
         return dataId;
       }
 
-      const videoOsd = document.querySelector('.videoOsdBottom-hidden');
-      const osdItemId = videoOsd?.querySelector('[data-itemid]')?.getAttribute('data-itemid');
+      const videoOsd = document.querySelector(".videoOsdBottom-hidden");
+      const osdItemId = videoOsd
+        ?.querySelector("[data-itemid]")
+        ?.getAttribute("data-itemid");
 
       if (osdItemId) {
         return osdItemId;
@@ -411,9 +422,13 @@
 
     async fetchItemInfo(id) {
       try {
-        const item = await this.fetchWithRetry(`${window.location.origin}/Items/${id}`, {
-          headers: { "X-Emby-Token": this.credentials.token }
-        }, OverlayController.RETRY_COUNT);
+        const item = await this.fetchWithRetry(
+          `${window.location.origin}/Items/${id}`,
+          {
+            headers: { "X-Emby-Token": this.credentials.token },
+          },
+          OverlayController.RETRY_COUNT,
+        );
         return item;
       } catch (error) {
         log("error", "Error fetching item info:", error);
@@ -430,7 +445,7 @@
           return await response.json();
         } catch (error) {
           if (i === maxRetries - 1) throw error;
-          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+          await new Promise((resolve) => setTimeout(resolve, 500 * (i + 1)));
         }
       }
     }
@@ -462,5 +477,7 @@
   }
 
   // Initialize the overlay controller when the script runs
-  new OverlayController();
+  const a = new OverlayController();
+
+  window.show = a.setOverlay;
 })();
